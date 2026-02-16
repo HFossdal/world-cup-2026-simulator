@@ -182,7 +182,7 @@ div[data-testid="stBottom"] > div {
     font-size: 0.9rem;
 }
 
-/* ── Dropdown option text (setup selectboxes) ────────────────── */
+/* ── Dropdown option list (open menu) ────────────────────────── */
 div[data-baseweb="select"] ul li {
     color: #1a1a1a !important;
     background-color: #ffffff !important;
@@ -192,6 +192,30 @@ div[data-baseweb="select"] ul li:hover {
 }
 div[data-baseweb="select"] ul {
     background-color: #ffffff !important;
+}
+/* ── Dropdown selected value (closed selectbox) ──────────────── */
+/* Must beat ".stApp div { color: #ffffff !important }" (specificity
+   0-1-1).  Using .stApp prefix + attribute selector gives 0-2-1,
+   which wins. */
+.stApp div[data-baseweb="select"] > div {
+    background-color: #f0f2f0 !important;
+    border-color: #4CAF50 !important;
+}
+.stApp div[data-baseweb="select"] > div > div {
+    color: #1a1a1a !important;
+}
+.stApp div[data-baseweb="select"] > div > div > div {
+    color: #1a1a1a !important;
+}
+.stApp div[data-baseweb="select"] span {
+    color: #1a1a1a !important;
+}
+.stApp div[data-baseweb="select"] input {
+    color: #1a1a1a !important;
+    -webkit-text-fill-color: #1a1a1a !important;
+}
+.stApp div[data-baseweb="select"] svg {
+    fill: #555555 !important;
 }
 </style>
 """
