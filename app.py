@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from data import TEAMS, GROUPS, get_teams_copy
+from data import TEAMS, GROUPS, get_teams_copy, get_groups_copy, PLAYOFF_SLOTS
 from simulation import (
     simulate_match,
     simulate_tournament,
@@ -34,6 +34,8 @@ from ui import (
     render_all_groups,
     render_monte_carlo,
     generate_narration,
+    generate_mc_narration,
+    render_setup_screen,
 )
 
 # ---------------------------------------------------------------------------
@@ -74,6 +76,27 @@ def autoplay_audio(audio_bytes: bytes):
     )
 
 
+def extract_focused_team(text: str, teams: dict[str, dict]) -> str | None:
+    """Extract a team code from user text if they explicitly mention a country.
+    Returns None if no specific team is mentioned."""
+    text_lower = text.lower()
+    # Check full country names first (longer match = more specific)
+    best_match: str | None = None
+    best_len = 0
+    for code, data in teams.items():
+        name = data.get("name", "").lower()
+        if name and name in text_lower and len(name) > best_len:
+            best_match = code
+            best_len = len(name)
+    # Also check 3-letter codes (e.g. "FRA", "BRA")
+    if not best_match:
+        for code in teams:
+            if code.lower() in text_lower.split():
+                best_match = code
+                break
+    return best_match
+
+
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
@@ -89,6 +112,12 @@ inject_css()
 # ---------------------------------------------------------------------------
 # Session state
 # ---------------------------------------------------------------------------
+if "setup_complete" not in st.session_state:
+    st.session_state.setup_complete = False
+if "playoff_selections" not in st.session_state:
+    st.session_state.playoff_selections = {}
+if "active_groups" not in st.session_state:
+    st.session_state.active_groups = None
 if "teams" not in st.session_state:
     st.session_state.teams = get_teams_copy()
 if "locked_results" not in st.session_state:
@@ -107,9 +136,35 @@ if "muted" not in st.session_state:
     st.session_state.muted = False
 if "pending_audio" not in st.session_state:
     st.session_state.pending_audio = None
+if "highlight_team" not in st.session_state:
+    st.session_state.highlight_team = None
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SETUP SCREEN — shown before simulation begins
+# ═══════════════════════════════════════════════════════════════════════════
+if not st.session_state.setup_complete:
+    start_clicked, selections = render_setup_screen()
+
+    if start_clicked:
+        st.session_state.playoff_selections = selections
+        st.session_state.active_groups = get_groups_copy(selections)
+        st.session_state.teams = get_teams_copy(selections)
+        st.session_state.agent = MistralScenarioAgent(
+            team_codes=list(st.session_state.teams.keys()),
+            groups=st.session_state.active_groups,
+        )
+        st.session_state.setup_complete = True
+        st.rerun()
+
+    st.stop()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIMULATION INTERFACE — shown after setup is complete
+# ═══════════════════════════════════════════════════════════════════════════
 teams = st.session_state.teams
 agent: MistralScenarioAgent = st.session_state.agent
+active_groups = st.session_state.active_groups or GROUPS
 
 # ---------------------------------------------------------------------------
 # Sidebar — controls & status
@@ -119,9 +174,10 @@ with st.sidebar:
 
     if st.button("🏆 Simulate Tournament", use_container_width=True, type="primary"):
         with st.spinner("Simulating..."):
-            result = simulate_tournament(teams, GROUPS, st.session_state.locked_results)
+            result = simulate_tournament(teams, active_groups, st.session_state.locked_results)
             st.session_state.tournament_result = result
             st.session_state.mc_data = None
+            st.session_state.highlight_team = None
             narration = generate_narration(result, teams)
             st.session_state.chat_history.append(
                 {"role": "assistant", "content": narration}
@@ -133,27 +189,40 @@ with st.sidebar:
     mc_n = st.select_slider("Monte Carlo runs", [100, 500, 1000, 5000], 1000)
     if st.button(f"📊 Run {mc_n} Simulations", use_container_width=True):
         with st.spinner(f"Running {mc_n} sims..."):
-            mc_data = run_monte_carlo(teams, mc_n, GROUPS, st.session_state.locked_results)
+            mc_data = run_monte_carlo(teams, mc_n, active_groups, st.session_state.locked_results)
             st.session_state.mc_data = mc_data
-            top5 = sorted(mc_data["win_probs"].items(), key=lambda x: x[1], reverse=True)[:5]
-            summary = "**Top 5 winners:** " + ", ".join(
-                f"{teams[c]['flag']} {teams[c]['name']} ({p:.1f}%)" for c, p in top5
+            st.session_state.tournament_result = None
+            st.session_state.highlight_team = None
+            narration = generate_mc_narration(mc_data, teams)
+            st.session_state.chat_history.append(
+                {"role": "assistant", "content": narration}
             )
-            st.session_state.chat_history.append({"role": "assistant", "content": summary})
+            if not st.session_state.muted:
+                st.session_state.pending_audio = narration
         st.rerun()
 
     st.markdown("---")
     if st.button("🔄 Reset All Modifications", use_container_width=True):
-        st.session_state.teams = get_teams_copy()
+        sels = st.session_state.playoff_selections
+        st.session_state.teams = get_teams_copy(sels)
         st.session_state.locked_results = {}
         st.session_state.change_log = []
         st.session_state.tournament_result = None
         st.session_state.mc_data = None
+        st.session_state.highlight_team = None
         agent.reset_conversation()
         st.session_state.chat_history.append(
             {"role": "assistant", "content": "All modifications reset to baseline."}
         )
         teams = st.session_state.teams
+        st.rerun()
+
+    if st.button("Change Lineup", use_container_width=True):
+        st.session_state.setup_complete = False
+        st.session_state.tournament_result = None
+        st.session_state.mc_data = None
+        st.session_state.chat_history = []
+        st.session_state.change_log = []
         st.rerun()
 
     if st.session_state.change_log:
@@ -217,17 +286,27 @@ if user_input := st.chat_input("Ask a what-if scenario..."):
     # Show user message
     st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-    # Get AI response
+    # Extract focused team from user message (for bracket highlighting)
+    focused = extract_focused_team(user_input, teams)
+    if focused:
+        st.session_state.highlight_team = focused
+
+    # ── Step 1: Mistral confirms scenario ──
     response = agent.chat(user_input, teams)
     st.session_state.chat_history.append(
         {"role": "assistant", "content": response.message}
     )
+    # Voice: speak the confirmation
+    if not st.session_state.muted and response.message:
+        st.session_state.pending_audio = response.message
 
     # Handle reset
     if response.should_reset:
-        st.session_state.teams = get_teams_copy()
+        sels = st.session_state.playoff_selections
+        st.session_state.teams = get_teams_copy(sels)
         st.session_state.locked_results = {}
         st.session_state.change_log = []
+        st.session_state.highlight_team = None
         teams = st.session_state.teams
         st.session_state.chat_history.append(
             {"role": "assistant", "content": "All modifications reset to baseline."}
@@ -244,30 +323,29 @@ if user_input := st.chat_input("Ask a what-if scenario..."):
                 {"role": "assistant", "content": "**Applied:** " + " | ".join(changes)}
             )
 
-    # Run simulation if requested
+    # ── Step 2 & 3: Simulate silently → narrate key findings ──
     if response.should_simulate:
         if response.sim_mode == "monte_carlo":
             with st.spinner(f"Running {response.sim_n} simulations..."):
                 mc_data = run_monte_carlo(
-                    teams, response.sim_n, GROUPS, st.session_state.locked_results
+                    teams, response.sim_n, active_groups, st.session_state.locked_results
                 )
                 st.session_state.mc_data = mc_data
-                top5 = sorted(
-                    mc_data["win_probs"].items(), key=lambda x: x[1], reverse=True
-                )[:5]
-                summary = "**Top 5 winners:** " + ", ".join(
-                    f"{teams[c]['flag']} {teams[c]['name']} ({p:.1f}%)"
-                    for c, p in top5
-                )
+                st.session_state.tournament_result = None
+                # Step 3: Narrate key findings
+                narration = generate_mc_narration(mc_data, teams)
                 st.session_state.chat_history.append(
-                    {"role": "assistant", "content": summary}
+                    {"role": "assistant", "content": narration}
                 )
+                if not st.session_state.muted:
+                    st.session_state.pending_audio = narration
         else:
             with st.spinner("Simulating tournament..."):
                 result = simulate_tournament(
-                    teams, GROUPS, st.session_state.locked_results
+                    teams, active_groups, st.session_state.locked_results
                 )
                 st.session_state.tournament_result = result
+                # Step 3: Narrate champion's path
                 narration = generate_narration(result, teams)
                 st.session_state.chat_history.append(
                     {"role": "assistant", "content": narration}
@@ -275,6 +353,7 @@ if user_input := st.chat_input("Ask a what-if scenario..."):
                 if not st.session_state.muted:
                     st.session_state.pending_audio = narration
 
+    # ── Step 5: Rerun for follow-up ──
     st.rerun()
 
 
@@ -285,7 +364,11 @@ if user_input := st.chat_input("Ask a what-if scenario..."):
 if st.session_state.tournament_result:
     st.markdown("---")
     st.markdown("### 🏆 Tournament Bracket")
-    render_bracket(st.session_state.tournament_result, teams)
+    render_bracket(
+        st.session_state.tournament_result,
+        teams,
+        highlight_team=st.session_state.highlight_team,
+    )
 
     # Group tables in expander
     with st.expander("📋 Group Stage Tables", expanded=False):

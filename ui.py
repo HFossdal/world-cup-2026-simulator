@@ -12,7 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 
-from data import TEAMS, GROUPS, get_h2h
+from data import TEAMS, GROUPS, CONFIRMED_QUALIFIED, PLAYOFF_SLOTS, get_h2h
 from simulation import MatchResult, GroupStanding, TournamentResult
 
 # ---------------------------------------------------------------------------
@@ -116,9 +116,70 @@ section[data-testid="stSidebar"] label {
 }
 
 /* ── Chat input ───────────────────────────────────────────────── */
+div[data-testid="stChatInput"] {
+    border-color: #4CAF50 !important;
+}
 div[data-testid="stChatInput"] textarea {
     color: #ffffff !important;
-    background-color: #132613 !important;
+    background-color: #1a2e1a !important;
+    border: 2px solid #4CAF50 !important;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
+    font-size: 16px !important;
+}
+div[data-testid="stChatInput"] textarea::placeholder {
+    color: #888888 !important;
+    opacity: 1 !important;
+}
+div[data-testid="stChatInput"] textarea:focus {
+    border-color: #FFD700 !important;
+    box-shadow: 0 0 8px rgba(255,215,0,0.3) !important;
+    outline: none !important;
+}
+/* Streamlit wraps chat input in a container with bottom border */
+div[data-testid="stChatInput"] > div {
+    border-color: #4CAF50 !important;
+}
+div[data-testid="stBottom"] {
+    background-color: #0d1f0d !important;
+}
+div[data-testid="stBottom"] > div {
+    background-color: #0d1f0d !important;
+}
+
+/* ── Setup screen ────────────────────────────────────────────── */
+.setup-header {
+    text-align: center;
+    padding: 1.5rem 0 1rem 0;
+}
+.setup-header h1 {
+    color: #FFD700 !important;
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    margin-bottom: 0.2rem;
+}
+.setup-header p {
+    color: #cccccc !important;
+    font-size: 1rem;
+}
+.setup-team-confirmed {
+    background: #132613;
+    border-left: 3px solid #4CAF50;
+    padding: 4px 10px;
+    margin: 2px 0;
+    border-radius: 0 4px 4px 0;
+    color: #ffffff;
+    font-size: 0.9rem;
+}
+.setup-slot-undecided {
+    background: #1a2e1a;
+    border: 1px dashed #FFD700;
+    padding: 6px 10px;
+    margin: 4px 0;
+    border-radius: 4px;
+    color: #FFD700;
+    font-size: 0.9rem;
 }
 </style>
 """
@@ -127,6 +188,116 @@ div[data-testid="stChatInput"] textarea {
 def inject_css():
     """Inject custom CSS into the Streamlit app."""
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Setup screen
+# ---------------------------------------------------------------------------
+
+def render_setup_screen():
+    """Render the tournament setup screen where users pick the 6 undecided
+    playoff slots. Returns (start_clicked, selections_dict) each call."""
+    st.markdown(
+        '<div class="setup-header">'
+        "<h1>FIFA WORLD CUP 2026 DRAW</h1>"
+        "<p>42 teams confirmed &mdash; 6 playoff spots to be decided (March 2026)</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Build a lookup: group_letter → list of slot dicts for that group
+    slots_by_group: dict[str, list[dict]] = {}
+    for slot in PLAYOFF_SLOTS:
+        slots_by_group.setdefault(slot["group"], []).append(slot)
+
+    # The position index in GROUPS that each slot occupies
+    # (this is needed to know which row in the group is undecided)
+    slot_pos_map: dict[str, dict[int, dict]] = {}  # group → {pos_idx: slot}
+    _pos_lookup = {
+        "slot_A3": ("A", 3), "slot_B3": ("B", 3), "slot_D3": ("D", 3),
+        "slot_F2": ("F", 2), "slot_I3": ("I", 3), "slot_K3": ("K", 3),
+    }
+    for slot in PLAYOFF_SLOTS:
+        grp, pos = _pos_lookup[slot["id"]]
+        slot_pos_map.setdefault(grp, {})[pos] = slot
+
+    selections: dict[str, str] = {}
+
+    # Display 12 groups in a 3-column grid
+    group_letters = list(GROUPS.keys())
+    for row_start in range(0, 12, 3):
+        cols = st.columns(3)
+        for col_idx, col in enumerate(cols):
+            grp_idx = row_start + col_idx
+            if grp_idx >= len(group_letters):
+                break
+            letter = group_letters[grp_idx]
+            team_codes = GROUPS[letter]
+            with col:
+                st.markdown(f'<div class="group-header">Group {letter}</div>',
+                            unsafe_allow_html=True)
+                for pos_idx, code in enumerate(team_codes):
+                    # Check if this position is an undecided slot
+                    slot_info = slot_pos_map.get(letter, {}).get(pos_idx)
+                    if slot_info:
+                        # Undecided slot — show selectbox
+                        candidates = slot_info["candidates"]
+                        candidate_labels = [
+                            f"{TEAMS[c]['flag']} {TEAMS[c]['name']}"
+                            for c in candidates
+                        ]
+                        st.markdown(
+                            f'<div class="setup-slot-undecided">'
+                            f'Pos {pos_idx + 1} — {slot_info["label"]}</div>',
+                            unsafe_allow_html=True,
+                        )
+                        chosen_idx = st.selectbox(
+                            f"Pick team for {slot_info['label']}",
+                            range(len(candidates)),
+                            format_func=lambda i, cl=candidate_labels: cl[i],
+                            key=f"setup_{slot_info['id']}",
+                            label_visibility="collapsed",
+                        )
+                        selections[slot_info["id"]] = candidates[chosen_idx]
+                    else:
+                        # Confirmed team — locked display
+                        t = TEAMS.get(code, {})
+                        st.markdown(
+                            f'<div class="setup-team-confirmed">'
+                            f'{t.get("flag", "")} {t.get("name", code)}</div>',
+                            unsafe_allow_html=True,
+                        )
+
+    st.markdown("---")
+
+    # Action buttons
+    btn_cols = st.columns(3)
+    with btn_cols[0]:
+        if st.button("Use Most Likely", use_container_width=True):
+            for slot in PLAYOFF_SLOTS:
+                selections[slot["id"]] = slot["most_likely"]
+                st.session_state[f"setup_{slot['id']}"] = 0  # first = most likely
+            st.rerun()
+    with btn_cols[1]:
+        import random as _rand
+        if st.button("Randomize", use_container_width=True):
+            for slot in PLAYOFF_SLOTS:
+                idx = _rand.randrange(len(slot["candidates"]))
+                selections[slot["id"]] = slot["candidates"][idx]
+                st.session_state[f"setup_{slot['id']}"] = idx
+            st.rerun()
+
+    # Ensure all slots have a selection
+    for slot in PLAYOFF_SLOTS:
+        if slot["id"] not in selections:
+            selections[slot["id"]] = slot["most_likely"]
+
+    with btn_cols[2]:
+        start_clicked = st.button(
+            "Start Simulating", use_container_width=True, type="primary"
+        )
+
+    return start_clicked, selections
 
 
 # ---------------------------------------------------------------------------
@@ -203,8 +374,14 @@ def _draw_match_node(
     y: float,
     teams: dict,
     label: str = "",
+    highlight_team: str | None = None,
 ):
-    """Append SVG elements for one match node at (x, y)."""
+    """Append SVG elements for one match node at (x, y).
+
+    highlight_team: If set to a team code, that team's name is rendered
+    in gold/bold. All other teams use neutral white text. When None,
+    the bracket is fully neutral (no highlighting).
+    """
     # Background rect
     parts.append(
         f'<rect x="{x}" y="{y}" width="{MATCH_W}" height="{MATCH_H}" '
@@ -230,12 +407,14 @@ def _draw_match_node(
     name_a = _truncate(ta.get("name", m.team_a))
     name_b = _truncate(tb.get("name", m.team_b))
     score_a, score_b = _score_label(m)
-    is_a_winner = m.winner == m.team_a
-    is_b_winner = m.winner == m.team_b
-    col_a = COL_WINNER if is_a_winner else COL_TEXT
-    col_b = COL_WINNER if is_b_winner else COL_TEXT
-    weight_a = "bold" if is_a_winner else "normal"
-    weight_b = "bold" if is_b_winner else "normal"
+
+    # Highlighting: only highlight if this specific team is focused
+    is_a_highlighted = highlight_team is not None and m.team_a == highlight_team
+    is_b_highlighted = highlight_team is not None and m.team_b == highlight_team
+    col_a = COL_WINNER if is_a_highlighted else COL_TEXT
+    col_b = COL_WINNER if is_b_highlighted else COL_TEXT
+    weight_a = "bold" if is_a_highlighted else "normal"
+    weight_b = "bold" if is_b_highlighted else "normal"
 
     # Row A — team name
     parts.append(
@@ -261,8 +440,16 @@ def _draw_match_node(
     )
 
 
-def generate_bracket_svg(result: TournamentResult, teams: dict) -> str:
-    """Generate a full SVG tournament bracket."""
+def generate_bracket_svg(
+    result: TournamentResult,
+    teams: dict,
+    highlight_team: str | None = None,
+) -> str:
+    """Generate a full SVG tournament bracket.
+
+    highlight_team: If set, highlight this team's appearances in gold.
+    When None, the bracket is fully neutral.
+    """
 
     rounds_data: list[tuple[str, list[MatchResult | None]]] = [
         ("ROUND OF 32", result.r32_matches),
@@ -388,7 +575,7 @@ def generate_bracket_svg(result: TournamentResult, teams: dict) -> str:
         ys = positions[round_idx]
         for i, y in enumerate(ys):
             m = matches[i] if i < len(matches) else None
-            _draw_match_node(svg, m, x, y, teams)
+            _draw_match_node(svg, m, x, y, teams, highlight_team=highlight_team)
 
     # ── Champion box ─────────────────────────────────────────────
     if result.champion:
@@ -428,9 +615,13 @@ def generate_bracket_svg(result: TournamentResult, teams: dict) -> str:
     return "\n".join(svg)
 
 
-def render_bracket(result: TournamentResult, teams: dict[str, dict]):
+def render_bracket(
+    result: TournamentResult,
+    teams: dict[str, dict],
+    highlight_team: str | None = None,
+):
     """Render the full knockout bracket as an interactive SVG."""
-    svg_html = generate_bracket_svg(result, teams)
+    svg_html = generate_bracket_svg(result, teams, highlight_team=highlight_team)
 
     # Wrap in scrollable container
     wrapper = f"""
@@ -566,31 +757,67 @@ def _ordinal(n: int) -> str:
     return f"{n}{['th','st','nd','rd'][min(n % 10, 4)] if n % 10 < 4 else 'th'}"
 
 
+def _knockout_drama(m, champ_code: str, teams: dict) -> str:
+    """Describe a knockout match in commentator style."""
+    opp_code = m.team_b if m.team_a == champ_code else m.team_a
+    opp = teams.get(opp_code, {})
+    opp_name = opp.get("name", opp_code)
+    total_a = m.score_a + m.et_score_a
+    total_b = m.score_b + m.et_score_b
+    if m.team_a == champ_code:
+        score = f"{total_a}-{total_b}"
+    else:
+        score = f"{total_b}-{total_a}"
+    if m.penalties:
+        pa = m.penalty_score_a if m.team_a == champ_code else m.penalty_score_b
+        pb = m.penalty_score_b if m.team_a == champ_code else m.penalty_score_a
+        return f"edged past {opp_name} {score} in a nail-biting penalty shootout, {pa}-{pb}"
+    elif m.extra_time:
+        return f"battled through extra time to overcome {opp_name} {score}"
+    elif (total_a - total_b >= 3) if m.team_a == champ_code else (total_b - total_a >= 3):
+        return f"demolished {opp_name} {score} in a dominant display"
+    else:
+        return f"dispatched {opp_name} {score}"
+
+
 def generate_narration(result: TournamentResult, teams: dict[str, dict]) -> str:
-    """Generate a plain-English narration of the tournament outcome,
+    """Generate a sports-commentator-style narration of the tournament outcome,
     tracing the champion's path from group stage to final."""
     if not result.champion:
-        return "The tournament simulation completed but no champion was determined."
+        return "What a tournament! But we couldn't determine a champion this time around."
 
     champ_code = result.champion
     champ = teams.get(champ_code, {})
+    champ_name = champ.get("name", champ_code)
     parts: list[str] = []
 
     parts.append(
-        f"{champ.get('flag', '')} {champ.get('name', champ_code)} "
-        f"won the 2026 FIFA World Cup!"
+        f"AND THERE IT IS! {champ_name} have done it! "
+        f"They are the 2026 FIFA World Cup Champions!"
     )
 
     # Group stage
     for group, table in result.group_tables.items():
         for i, standing in enumerate(table):
             if standing.team == champ_code:
-                parts.append(
-                    f"They finished {_ordinal(i + 1)} in Group {group} "
-                    f"with {standing.points} points "
-                    f"({standing.wins}W {standing.draws}D {standing.losses}L, "
-                    f"{standing.gf} goals scored)."
-                )
+                if i == 0:
+                    parts.append(
+                        f"They stormed through Group {group}, "
+                        f"finishing top with {standing.points} points "
+                        f"and {standing.gf} goals to their name."
+                    )
+                elif i == 1:
+                    parts.append(
+                        f"They qualified as runners-up from Group {group} "
+                        f"with {standing.points} points, "
+                        f"but don't let that fool you — they were saving their best."
+                    )
+                else:
+                    parts.append(
+                        f"Remarkably, they scraped through as one of the best "
+                        f"third-placed teams from Group {group} with just "
+                        f"{standing.points} points. Nobody saw this coming!"
+                    )
                 break
 
     # Knockout path
@@ -601,36 +828,23 @@ def generate_narration(result: TournamentResult, teams: dict[str, dict]) -> str:
         ("Semifinals", result.sf_matches),
     ]
 
+    ko_parts: list[str] = []
     for round_name, matches in round_labels:
         for m in matches:
             if m and m.winner == champ_code:
-                opp_code = m.team_b if m.team_a == champ_code else m.team_a
-                opp = teams.get(opp_code, {})
-                total_a = m.score_a + m.et_score_a
-                total_b = m.score_b + m.et_score_b
-                if m.team_a == champ_code:
-                    score = f"{total_a}-{total_b}"
-                else:
-                    score = f"{total_b}-{total_a}"
-                extra = ""
-                if m.penalties:
-                    pa = m.penalty_score_a if m.team_a == champ_code else m.penalty_score_b
-                    pb = m.penalty_score_b if m.team_a == champ_code else m.penalty_score_a
-                    extra = f" on penalties ({pa}-{pb})"
-                elif m.extra_time:
-                    extra = " after extra time"
-                parts.append(
-                    f"In the {round_name}, they beat "
-                    f"{opp.get('flag', '')} {opp.get('name', opp_code)} "
-                    f"{score}{extra}."
-                )
+                ko_parts.append(f"In the {round_name}, they {_knockout_drama(m, champ_code, teams)}.")
                 break
+
+    if ko_parts:
+        parts.append("Then the knockout stage — and what a ride it was!")
+        parts.extend(ko_parts)
 
     # Final
     if result.final_match:
         m = result.final_match
         opp_code = m.team_b if m.team_a == champ_code else m.team_a
         opp = teams.get(opp_code, {})
+        opp_name = opp.get("name", opp_code)
         total_a = m.score_a + m.et_score_a
         total_b = m.score_b + m.et_score_b
         if m.team_a == champ_code:
@@ -641,13 +855,85 @@ def generate_narration(result: TournamentResult, teams: dict[str, dict]) -> str:
         if m.penalties:
             pa = m.penalty_score_a if m.team_a == champ_code else m.penalty_score_b
             pb = m.penalty_score_b if m.team_a == champ_code else m.penalty_score_a
-            extra = f" on penalties ({pa}-{pb})"
+            extra = f" on penalties {pa}-{pb} — the drama was UNREAL"
         elif m.extra_time:
-            extra = " after extra time"
+            extra = " after a grueling extra time period"
         parts.append(
-            f"In the Final, they defeated "
-            f"{opp.get('flag', '')} {opp.get('name', opp_code)} "
-            f"{score}{extra} to lift the trophy!"
+            f"And in the Grand Final — {champ_name} {score} {opp_name}{extra}! "
+            f"The trophy is theirs! What an incredible tournament!"
         )
 
     return " ".join(parts)
+
+
+def generate_mc_narration(mc_data: dict, teams: dict[str, dict]) -> str:
+    """Generate a sports-commentator-style narration of Monte Carlo findings."""
+    n = mc_data["n"]
+    win_probs = mc_data["win_probs"]
+    stage_probs = mc_data.get("stage_probs", {})
+    top5 = sorted(win_probs.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    if not top5 or top5[0][1] == 0:
+        return "The simulations are in, but it's wide open — no clear favourite!"
+
+    parts: list[str] = []
+    leader_code, leader_pct = top5[0]
+    leader = teams.get(leader_code, {})
+    leader_name = leader.get("name", leader_code)
+
+    # Top 5 winners with exact percentages
+    parts.append(
+        f"After {n:,} simulations, the numbers are IN! "
+        f"Here are your top 5 title contenders:"
+    )
+    for i, (code, pct) in enumerate(top5):
+        t = teams.get(code, {})
+        name = t.get("name", code)
+        flag = t.get("flag", "")
+        parts.append(f"{i+1}. {flag} {name} — {pct:.1f}%")
+
+    # Most likely final matchup
+    if mc_data.get("most_likely_final"):
+        pair = mc_data["most_likely_final"]
+        ta = teams.get(pair[0], {})
+        tb = teams.get(pair[1], {})
+        parts.append(
+            f"\nThe dream final? {ta.get('flag', '')} {ta.get('name', pair[0])} versus "
+            f"{tb.get('name', pair[1])} {tb.get('flag', '')} — that matchup came up "
+            f"{mc_data['most_likely_final_pct']:.1f}% of the time!"
+        )
+
+    # Dark horse: highest win% team ranked outside FIFA top 15
+    dark_horses = [
+        (code, pct) for code, pct in win_probs.items()
+        if pct > 0 and teams.get(code, {}).get("fifa_ranking", 100) > 15
+    ]
+    if dark_horses:
+        dark_horses.sort(key=lambda x: x[1], reverse=True)
+        dh_code, dh_pct = dark_horses[0]
+        dh = teams.get(dh_code, {})
+        parts.append(
+            f"\nDark horse alert! {dh.get('flag', '')} {dh.get('name', dh_code)} "
+            f"(FIFA #{dh.get('fifa_ranking', '?')}) are winning it in {dh_pct:.1f}% "
+            f"of simulations — don't sleep on them!"
+        )
+
+    # Semi-final regulars: top 3 teams by SF+Final+Winner combined probability
+    if stage_probs:
+        sf_regulars = []
+        for code, probs in stage_probs.items():
+            deep_run_pct = probs.get("SF", 0) + probs.get("Final", 0) + probs.get("Winner", 0)
+            if deep_run_pct > 0:
+                sf_regulars.append((code, deep_run_pct))
+        sf_regulars.sort(key=lambda x: x[1], reverse=True)
+        top3_sf = sf_regulars[:3]
+        if top3_sf:
+            sf_names = ", ".join(
+                f"{teams.get(c, {}).get('flag', '')} {teams.get(c, {}).get('name', c)} ({p:.1f}%)"
+                for c, p in top3_sf
+            )
+            parts.append(
+                f"\nSemi-final regulars (SF+ reach rate): {sf_names}"
+            )
+
+    return "\n".join(parts)

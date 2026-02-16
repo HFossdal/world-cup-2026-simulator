@@ -605,6 +605,199 @@ TEAMS: dict[str, dict] = {
             "GK": ["O. Mosquera"],
         },
     },
+    # ── Playoff candidate teams (not yet qualified) ───────────────
+    "NIR": {
+        "name": "Northern Ireland", "code": "NIR", "flag": "🇬🇧",
+        "confederation": "UEFA", "fifa_ranking": 52,
+        "attack": 1.00, "defense": 1.10, "midfield": 1.05,
+        "form": 0.40,
+        "key_players": {
+            "FW": ["C. Washington", "D. Charles"],
+            "MF": ["S. Davis", "A. McCann"],
+            "DF": ["J. Evans", "P. McNair"],
+            "GK": ["B. Peacock-Farrell"],
+        },
+    },
+    "WAL": {
+        "name": "Wales", "code": "WAL", "flag": "🏴󠁧󠁢󠁷󠁬󠁳󠁿",
+        "confederation": "UEFA", "fifa_ranking": 48,
+        "attack": 1.10, "defense": 1.15, "midfield": 1.10,
+        "form": 0.40,
+        "key_players": {
+            "FW": ["B. Johnson", "M. Harris"],
+            "MF": ["A. Ramsey", "H. Wilson"],
+            "DF": ["B. Davies", "C. Mepham"],
+            "GK": ["D. Ward"],
+        },
+    },
+    "BIH": {
+        "name": "Bosnia & Herzegovina", "code": "BIH", "flag": "🇧🇦",
+        "confederation": "UEFA", "fifa_ranking": 50,
+        "attack": 1.15, "defense": 1.10, "midfield": 1.10,
+        "form": 0.40,
+        "key_players": {
+            "FW": ["E. Džeko", "E. Demirović"],
+            "MF": ["M. Pjanić", "A. Hajradinović"],
+            "DF": ["S. Kolašinac", "E. Bičakčić"],
+            "GK": ["N. Vasilj"],
+        },
+    },
+    "UKR": {
+        "name": "Ukraine", "code": "UKR", "flag": "🇺🇦",
+        "confederation": "UEFA", "fifa_ranking": 22,
+        "attack": 1.40, "defense": 1.40, "midfield": 1.40,
+        "form": 0.55,
+        "key_players": {
+            "FW": ["A. Dovbyk", "M. Mudryk"],
+            "MF": ["O. Zinchenko", "R. Malinovskyi"],
+            "DF": ["I. Zabarnyi", "M. Matviyenko"],
+            "GK": ["A. Lunin"],
+        },
+    },
+    "SWE": {
+        "name": "Sweden", "code": "SWE", "flag": "🇸🇪",
+        "confederation": "UEFA", "fifa_ranking": 23,
+        "attack": 1.35, "defense": 1.40, "midfield": 1.35,
+        "form": 0.50,
+        "key_players": {
+            "FW": ["A. Isak", "V. Gyökeres"],
+            "MF": ["D. Kulusevski", "J. Svanberg"],
+            "DF": ["V. Lindelöf", "E. Krafth"],
+            "GK": ["R. Olsen"],
+        },
+    },
+    "ALB": {
+        "name": "Albania", "code": "ALB", "flag": "🇦🇱",
+        "confederation": "UEFA", "fifa_ranking": 46,
+        "attack": 1.10, "defense": 1.20, "midfield": 1.10,
+        "form": 0.45,
+        "key_players": {
+            "FW": ["A. Broja", "J. Bajrami"],
+            "MF": ["K. Asllani", "N. Bajrami"],
+            "DF": ["B. Djimsiti", "E. Hysaj"],
+            "GK": ["T. Strakosha"],
+        },
+    },
+    "ROU": {
+        "name": "Romania", "code": "ROU", "flag": "🇷🇴",
+        "confederation": "UEFA", "fifa_ranking": 30,
+        "attack": 1.25, "defense": 1.30, "midfield": 1.25,
+        "form": 0.50,
+        "key_players": {
+            "FW": ["D. Drăgușin", "G. Pușcaș"],
+            "MF": ["N. Stanciu", "R. Marin"],
+            "DF": ["A. Rațiu", "R. Drăgușin"],
+            "GK": ["F. Niță"],
+        },
+    },
+    "SVK": {
+        "name": "Slovakia", "code": "SVK", "flag": "🇸🇰",
+        "confederation": "UEFA", "fifa_ranking": 38,
+        "attack": 1.15, "defense": 1.25, "midfield": 1.15,
+        "form": 0.45,
+        "key_players": {
+            "FW": ["R. Boženík", "D. Strelec"],
+            "MF": ["S. Lobotka", "O. Duda"],
+            "DF": ["M. Škriniar", "D. Hancko"],
+            "GK": ["M. Dúbravka"],
+        },
+    },
+    "XKX": {
+        "name": "Kosovo", "code": "XKX", "flag": "🇽🇰",
+        "confederation": "UEFA", "fifa_ranking": 55,
+        "attack": 1.05, "defense": 1.05, "midfield": 1.05,
+        "form": 0.40,
+        "key_players": {
+            "FW": ["V. Muriqi", "E. Rashica"],
+            "MF": ["M. Vojvoda", "A. Zhegrova"],
+            "DF": ["A. Rrahmani", "F. Hadergjonaj"],
+            "GK": ["A. Muric"],
+        },
+    },
+    "MKD": {
+        "name": "North Macedonia", "code": "MKD", "flag": "🇲🇰",
+        "confederation": "UEFA", "fifa_ranking": 56,
+        "attack": 1.05, "defense": 1.05, "midfield": 1.00,
+        "form": 0.35,
+        "key_players": {
+            "FW": ["A. Trajkovski", "B. Miovski"],
+            "MF": ["E. Elmas", "E. Bardhi"],
+            "DF": ["S. Ristovski", "D. Velkoski"],
+            "GK": ["S. Dimitrievski"],
+        },
+    },
+    "CZE": {
+        "name": "Czech Republic", "code": "CZE", "flag": "🇨🇿",
+        "confederation": "UEFA", "fifa_ranking": 35,
+        "attack": 1.20, "defense": 1.25, "midfield": 1.20,
+        "form": 0.45,
+        "key_players": {
+            "FW": ["P. Schick", "A. Hložek"],
+            "MF": ["A. Barák", "T. Souček"],
+            "DF": ["T. Holeš", "L. Krejčí"],
+            "GK": ["J. Staněk"],
+        },
+    },
+    "IRL": {
+        "name": "Republic of Ireland", "code": "IRL", "flag": "🇮🇪",
+        "confederation": "UEFA", "fifa_ranking": 51,
+        "attack": 1.00, "defense": 1.15, "midfield": 1.05,
+        "form": 0.35,
+        "key_players": {
+            "FW": ["E. Ferguson", "T. Idah"],
+            "MF": ["J. Knight", "J. Cullen"],
+            "DF": ["N. Collins", "S. Coleman"],
+            "GK": ["C. Kelleher"],
+        },
+    },
+    "NCL": {
+        "name": "New Caledonia", "code": "NCL", "flag": "🇳🇨",
+        "confederation": "OFC", "fifa_ranking": 80,
+        "attack": 0.70, "defense": 0.75, "midfield": 0.70,
+        "form": 0.30,
+        "key_players": {
+            "FW": ["G. Gope-Fenepej", "J. Hmae"],
+            "MF": ["B. Kaicone", "R. Cama"],
+            "DF": ["J. Wahnawe", "D. Xalite"],
+            "GK": ["R. Deloy"],
+        },
+    },
+    "JAM": {
+        "name": "Jamaica", "code": "JAM", "flag": "🇯🇲",
+        "confederation": "CONCACAF", "fifa_ranking": 54,
+        "attack": 1.05, "defense": 1.05, "midfield": 1.00,
+        "form": 0.35,
+        "key_players": {
+            "FW": ["M. Antonio", "L. Nicholson"],
+            "MF": ["L. Bailey", "B. Reid"],
+            "DF": ["A. Blake", "D. Lowe"],
+            "GK": ["A. Blake"],
+        },
+    },
+    "BOL": {
+        "name": "Bolivia", "code": "BOL", "flag": "🇧🇴",
+        "confederation": "CONMEBOL", "fifa_ranking": 60,
+        "attack": 0.95, "defense": 1.00, "midfield": 0.95,
+        "form": 0.35,
+        "key_players": {
+            "FW": ["R. Vaca", "C. Suárez"],
+            "MF": ["M. Villarroel", "F. Saucedo"],
+            "DF": ["J. Sagredo", "A. Jusino"],
+            "GK": ["C. Lampe"],
+        },
+    },
+    "SUR": {
+        "name": "Suriname", "code": "SUR", "flag": "🇸🇷",
+        "confederation": "CONCACAF", "fifa_ranking": 65,
+        "attack": 0.90, "defense": 0.90, "midfield": 0.85,
+        "form": 0.30,
+        "key_players": {
+            "FW": ["G. Haps", "I. Becker"],
+            "MF": ["R. Donk", "S. Yeini"],
+            "DF": ["K. Leerdam", "D. Pinas"],
+            "GK": ["W. Hato"],
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -827,9 +1020,122 @@ def get_h2h(team_a: str, team_b: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Qualification status — 42 confirmed, 6 undecided (March 2026 playoffs)
+# ---------------------------------------------------------------------------
+
+CONFIRMED_QUALIFIED: set[str] = {
+    # AFC (8)
+    "AUS", "IRN", "JPN", "JOR", "QAT", "KSA", "KOR", "UZB",
+    # CAF (9)
+    "ALG", "CPV", "EGY", "GHA", "CIV", "MAR", "SEN", "RSA", "TUN",
+    # UEFA (12)
+    "AUT", "BEL", "CRO", "ENG", "FRA", "GER", "NED", "NOR", "POR", "SCO", "ESP", "SUI",
+    # CONCACAF (6)
+    "CAN", "CUR", "HAI", "MEX", "PAN", "USA",
+    # CONMEBOL (6)
+    "ARG", "BRA", "COL", "ECU", "PAR", "URU",
+    # OFC (1)
+    "NZL",
+}
+
+PLAYOFF_SLOTS: list[dict] = [
+    {
+        "id": "slot_A3",
+        "group": "A",
+        "position": 3,
+        "label": "UEFA Path D",
+        "candidates": ["DEN", "MKD", "CZE", "IRL"],
+        "most_likely": "DEN",
+    },
+    {
+        "id": "slot_B3",
+        "group": "B",
+        "position": 3,
+        "label": "UEFA Path A",
+        "candidates": ["ITA", "NIR", "WAL", "BIH"],
+        "most_likely": "ITA",
+    },
+    {
+        "id": "slot_D3",
+        "group": "D",
+        "position": 3,
+        "label": "UEFA Path C",
+        "candidates": ["TUR", "ROU", "SVK", "XKX"],
+        "most_likely": "TUR",
+    },
+    {
+        "id": "slot_F2",
+        "group": "F",
+        "position": 1,  # 0-indexed position 1 = 2nd in group
+        "label": "UEFA Path B",
+        "candidates": ["POL", "UKR", "SWE", "ALB"],
+        "most_likely": "POL",
+    },
+    {
+        "id": "slot_I3",
+        "group": "I",
+        "position": 3,
+        "label": "Intercontinental 2",
+        "candidates": ["IRQ", "BOL", "SUR"],
+        "most_likely": "IRQ",
+    },
+    {
+        "id": "slot_K3",
+        "group": "K",
+        "position": 3,
+        "label": "Intercontinental 1",
+        "candidates": ["COD", "JAM", "NCL"],
+        "most_likely": "COD",
+    },
+]
+
+# Map from slot placeholder to default team (most_likely) for quick lookup
+_SLOT_DEFAULTS: dict[str, str] = {
+    slot["id"]: slot["most_likely"] for slot in PLAYOFF_SLOTS
+}
+
+# Map from slot id to (group, position_index) for group replacement
+_SLOT_GROUP_POS: dict[str, tuple[str, int]] = {
+    "slot_A3": ("A", 3),
+    "slot_B3": ("B", 3),
+    "slot_D3": ("D", 3),
+    "slot_F2": ("F", 2),
+    "slot_I3": ("I", 3),
+    "slot_K3": ("K", 3),
+}
+
+# ---------------------------------------------------------------------------
 # Helper: deep-copy mutable team data so scenarios don't corrupt baseline
 # ---------------------------------------------------------------------------
 
-def get_teams_copy() -> dict[str, dict]:
-    """Return a deep copy of the global TEAMS dict."""
-    return copy.deepcopy(TEAMS)
+def get_teams_copy(selections: dict[str, str] | None = None) -> dict[str, dict]:
+    """Return a deep copy of the 48 teams for the tournament.
+
+    *selections* maps playoff slot id → chosen team code.
+    If None or incomplete, missing slots use the most_likely defaults.
+    Only the 42 confirmed teams plus the 6 selected (or default) teams
+    are included.
+    """
+    selections = selections or {}
+    chosen_codes: set[str] = set(CONFIRMED_QUALIFIED)
+    for slot in PLAYOFF_SLOTS:
+        code = selections.get(slot["id"], slot["most_likely"])
+        chosen_codes.add(code)
+    return {
+        code: copy.deepcopy(TEAMS[code])
+        for code in chosen_codes
+        if code in TEAMS
+    }
+
+
+def get_groups_copy(selections: dict[str, str] | None = None) -> dict[str, list[str]]:
+    """Return a copy of GROUPS with playoff placeholder positions
+    swapped to the selected (or default) teams."""
+    selections = selections or {}
+    groups = copy.deepcopy(GROUPS)
+    for slot in PLAYOFF_SLOTS:
+        code = selections.get(slot["id"], slot["most_likely"])
+        group_letter, pos_idx = _SLOT_GROUP_POS[slot["id"]]
+        if pos_idx < len(groups[group_letter]):
+            groups[group_letter][pos_idx] = code
+    return groups

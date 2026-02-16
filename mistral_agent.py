@@ -12,7 +12,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-from data import TEAMS, GROUPS, get_teams_copy
+from data import TEAMS, GROUPS, get_teams_copy, CONFIRMED_QUALIFIED, PLAYOFF_SLOTS
 
 # ---------------------------------------------------------------------------
 # Try to import Mistral client
@@ -28,7 +28,7 @@ except ImportError:
 # System prompt for Mistral
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are the World Cup 2026 Simulator AI, an expert FIFA World Cup 2026 analyst assistant.
+_SYSTEM_PROMPT_TEMPLATE = """You are the World Cup 2026 Simulator AI, an expert FIFA World Cup 2026 analyst assistant.
 You help users explore "what if" scenarios for the World Cup by modifying simulation parameters.
 
 When users ask about scenarios, you MUST respond with a JSON block wrapped in ```json ... ``` tags
@@ -38,60 +38,82 @@ containing the modifications, followed by a plain-English explanation.
 
 1. **adjust_team_rating** — Change a team's attack, defense, or midfield rating.
    ```json
-   {"action": "adjust_team_rating", "team": "FRA", "attribute": "attack", "delta": -0.20}
+   {{"action": "adjust_team_rating", "team": "FRA", "attribute": "attack", "delta": -0.20}}
    ```
 
 2. **lock_result** — Lock a specific match result.
    ```json
-   {"action": "lock_result", "team_a": "NOR", "team_b": "FRA", "score_a": 2, "score_b": 1}
+   {{"action": "lock_result", "team_a": "NOR", "team_b": "FRA", "score_a": 2, "score_b": 1}}
    ```
 
 3. **boost_team** — Increase all ratings for a team by a percentage.
    ```json
-   {"action": "boost_team", "team": "BRA", "pct": 15}
+   {{"action": "boost_team", "team": "BRA", "pct": 15}}
    ```
 
 4. **nerf_team** — Decrease all ratings for a team by a percentage.
    ```json
-   {"action": "nerf_team", "team": "BRA", "pct": 20}
+   {{"action": "nerf_team", "team": "BRA", "pct": 20}}
    ```
 
 5. **simulate** — Trigger a simulation (single or Monte Carlo).
    ```json
-   {"action": "simulate", "mode": "once"}
+   {{"action": "simulate", "mode": "once"}}
    ```
    or:
    ```json
-   {"action": "simulate", "mode": "monte_carlo", "n": 1000}
+   {{"action": "simulate", "mode": "monte_carlo", "n": 1000}}
    ```
 
 6. **reset** — Reset all modifications back to baseline.
    ```json
-   {"action": "reset"}
+   {{"action": "reset"}}
    ```
 
 You can chain multiple actions in an array: ```json [action1, action2, ...]```.
 
 ## Team codes (use these exactly):
-ARG, FRA, ESP, ENG, BRA, BEL, NED, POR, GER, ITA, CRO, COL, URU, MEX, USA,
-MAR, SUI, JPN, DEN, TUR, AUT, ECU, SEN, KOR, POL, IRN, SCO, AUS, NOR, EGY,
-TUN, ALG, PAR, QAT, KSA, GHA, PAN, CIV, COD, JOR, UZB, IRQ, RSA, NZL, CPV,
-CUR, HAI, CAN
+{team_codes}
 
 ## Group draw:
-A: MEX, KOR, RSA, DEN  |  B: CAN, SUI, QAT, ITA  |  C: BRA, MAR, HAI, SCO
-D: USA, PAR, AUS, TUR  |  E: GER, CUR, CIV, ECU  |  F: NED, JPN, POL, TUN
-G: BEL, EGY, IRN, NZL  |  H: ESP, URU, KSA, CPV  |  I: FRA, SEN, NOR, IRQ
-J: ARG, ALG, AUT, JOR   |  K: POR, COL, UZB, COD  |  L: ENG, CRO, GHA, PAN
+{group_draw}
 
 ## Guidelines:
 - For injury scenarios, reduce the team's attack (for forwards) or defense (for defenders) by 0.10-0.25.
 - For "what if they win", lock the result and suggest re-simulating.
 - For probability questions, suggest running Monte Carlo (1000 sims).
 - Always explain your reasoning clearly.
-- Be enthusiastic about football analysis!
+- **Write like a sports commentator!** Be excited, dynamic, and enthusiastic. Use punchy language and football terminology. Never be robotic or dry. Your responses will be spoken aloud by a voice narrator, so make them sound natural and thrilling.
+- Example tone: "Great shout! Let's see what happens if the Seleção get a 20% power boost — they'll be absolutely terrifying going forward!"
 - If user wants to reset, include the reset action.
 """
+
+
+def _build_system_prompt(
+    team_codes: list[str] | None = None,
+    groups: dict[str, list[str]] | None = None,
+) -> str:
+    """Build a system prompt dynamically from the active teams and groups."""
+    if team_codes is None:
+        team_codes = sorted(TEAMS.keys())
+    if groups is None:
+        groups = GROUPS
+
+    codes_str = ", ".join(sorted(team_codes))
+
+    group_parts: list[str] = []
+    letters = sorted(groups.keys())
+    for i in range(0, len(letters), 4):
+        chunk = letters[i:i+4]
+        group_parts.append("  |  ".join(
+            f"{l}: {', '.join(groups[l])}" for l in chunk
+        ))
+    draw_str = "\n".join(group_parts)
+
+    return _SYSTEM_PROMPT_TEMPLATE.format(
+        team_codes=codes_str,
+        group_draw=draw_str,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -117,12 +139,17 @@ class AgentResponse:
 class MistralScenarioAgent:
     """Mistral-powered scenario agent for modifying World Cup simulations."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        team_codes: list[str] | None = None,
+        groups: dict[str, list[str]] | None = None,
+    ):
         self.api_key = os.getenv("MISTRAL_API_KEY", "")
         self.model = "mistral-large-latest"
         self.conversation_history: list[dict] = []
         self.modifications_log: list[str] = []
         self.client = None
+        self.system_prompt = _build_system_prompt(team_codes, groups)
 
         if MISTRAL_AVAILABLE and self.api_key:
             self.client = Mistral(api_key=self.api_key)
@@ -142,7 +169,7 @@ class MistralScenarioAgent:
 
         self.conversation_history.append({"role": "user", "content": user_message})
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": self.system_prompt}]
         messages.extend(self.conversation_history[-20:])  # Keep last 20 messages
 
         try:
