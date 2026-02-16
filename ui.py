@@ -181,6 +181,18 @@ div[data-testid="stBottom"] > div {
     color: #FFD700;
     font-size: 0.9rem;
 }
+
+/* ── Dropdown option text (setup selectboxes) ────────────────── */
+div[data-baseweb="select"] ul li {
+    color: #1a1a1a !important;
+    background-color: #ffffff !important;
+}
+div[data-baseweb="select"] ul li:hover {
+    background-color: #e8f5e9 !important;
+}
+div[data-baseweb="select"] ul {
+    background-color: #ffffff !important;
+}
 </style>
 """
 
@@ -197,6 +209,23 @@ def inject_css():
 def render_setup_screen():
     """Render the tournament setup screen where users pick the 6 undecided
     playoff slots. Returns (start_clicked, selections_dict) each call."""
+    import random as _rand
+
+    # ── Phase 1: Consume pending button flags BEFORE widgets render ──
+    # This avoids the Streamlit error of modifying widget-bound session
+    # state after the widget has already been created.
+    if st.session_state.get("_setup_use_likely"):
+        for slot in PLAYOFF_SLOTS:
+            st.session_state[f"setup_{slot['id']}"] = 0  # first = most likely
+        st.session_state["_setup_use_likely"] = False
+
+    if st.session_state.get("_setup_randomize"):
+        for slot in PLAYOFF_SLOTS:
+            idx = _rand.randrange(len(slot["candidates"]))
+            st.session_state[f"setup_{slot['id']}"] = idx
+        st.session_state["_setup_randomize"] = False
+
+    # ── Header ──
     st.markdown(
         '<div class="setup-header">'
         "<h1>FIFA WORLD CUP 2026 DRAW</h1>"
@@ -205,14 +234,8 @@ def render_setup_screen():
         unsafe_allow_html=True,
     )
 
-    # Build a lookup: group_letter → list of slot dicts for that group
-    slots_by_group: dict[str, list[dict]] = {}
-    for slot in PLAYOFF_SLOTS:
-        slots_by_group.setdefault(slot["group"], []).append(slot)
-
-    # The position index in GROUPS that each slot occupies
-    # (this is needed to know which row in the group is undecided)
-    slot_pos_map: dict[str, dict[int, dict]] = {}  # group → {pos_idx: slot}
+    # Build a lookup: group → {pos_idx: slot_info}
+    slot_pos_map: dict[str, dict[int, dict]] = {}
     _pos_lookup = {
         "slot_A3": ("A", 3), "slot_B3": ("B", 3), "slot_D3": ("D", 3),
         "slot_F2": ("F", 2), "slot_I3": ("I", 3), "slot_K3": ("K", 3),
@@ -223,7 +246,7 @@ def render_setup_screen():
 
     selections: dict[str, str] = {}
 
-    # Display 12 groups in a 3-column grid
+    # ── Display 12 groups in a 3-column grid ──
     group_letters = list(GROUPS.keys())
     for row_start in range(0, 12, 3):
         cols = st.columns(3)
@@ -237,10 +260,8 @@ def render_setup_screen():
                 st.markdown(f'<div class="group-header">Group {letter}</div>',
                             unsafe_allow_html=True)
                 for pos_idx, code in enumerate(team_codes):
-                    # Check if this position is an undecided slot
                     slot_info = slot_pos_map.get(letter, {}).get(pos_idx)
                     if slot_info:
-                        # Undecided slot — show selectbox
                         candidates = slot_info["candidates"]
                         candidate_labels = [
                             f"{TEAMS[c]['flag']} {TEAMS[c]['name']}"
@@ -260,7 +281,6 @@ def render_setup_screen():
                         )
                         selections[slot_info["id"]] = candidates[chosen_idx]
                     else:
-                        # Confirmed team — locked display
                         t = TEAMS.get(code, {})
                         st.markdown(
                             f'<div class="setup-team-confirmed">'
@@ -270,21 +290,15 @@ def render_setup_screen():
 
     st.markdown("---")
 
-    # Action buttons
+    # ── Phase 2: Action buttons set flags then rerun ──
     btn_cols = st.columns(3)
     with btn_cols[0]:
         if st.button("Use Most Likely", use_container_width=True):
-            for slot in PLAYOFF_SLOTS:
-                selections[slot["id"]] = slot["most_likely"]
-                st.session_state[f"setup_{slot['id']}"] = 0  # first = most likely
+            st.session_state["_setup_use_likely"] = True
             st.rerun()
     with btn_cols[1]:
-        import random as _rand
         if st.button("Randomize", use_container_width=True):
-            for slot in PLAYOFF_SLOTS:
-                idx = _rand.randrange(len(slot["candidates"]))
-                selections[slot["id"]] = slot["candidates"][idx]
-                st.session_state[f"setup_{slot['id']}"] = idx
+            st.session_state["_setup_randomize"] = True
             st.rerun()
 
     # Ensure all slots have a selection
