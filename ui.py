@@ -16,6 +16,39 @@ from data import TEAMS, GROUPS, CONFIRMED_QUALIFIED, PLAYOFF_SLOTS, get_h2h
 from simulation import MatchResult, GroupStanding, TournamentResult
 
 # ---------------------------------------------------------------------------
+# Flag images — cross-platform (Unicode flag emojis don't render on Windows)
+# ---------------------------------------------------------------------------
+# Maps FIFA 3-letter codes → ISO 3166-1 alpha-2 (lowercase) for flagcdn.com
+_FIFA_TO_ISO2: dict[str, str] = {
+    "MEX": "mx", "KOR": "kr", "RSA": "za", "DEN": "dk", "CAN": "ca",
+    "SUI": "ch", "QAT": "qa", "ITA": "it", "BRA": "br", "MAR": "ma",
+    "HAI": "ht", "SCO": "gb-sct", "USA": "us", "PAR": "py", "AUS": "au",
+    "TUR": "tr", "GER": "de", "CUR": "cw", "CIV": "ci", "ECU": "ec",
+    "NED": "nl", "JPN": "jp", "POL": "pl", "TUN": "tn", "BEL": "be",
+    "EGY": "eg", "IRN": "ir", "NZL": "nz", "ESP": "es", "URU": "uy",
+    "KSA": "sa", "CPV": "cv", "FRA": "fr", "SEN": "sn", "NOR": "no",
+    "IRQ": "iq", "ARG": "ar", "ALG": "dz", "AUT": "at", "JOR": "jo",
+    "POR": "pt", "COL": "co", "UZB": "uz", "COD": "cd", "ENG": "gb-eng",
+    "CRO": "hr", "GHA": "gh", "PAN": "pa", "NIR": "gb-nir", "WAL": "gb-wls",
+    "BIH": "ba", "UKR": "ua", "SWE": "se", "ALB": "al", "ROU": "ro",
+    "SVK": "sk", "XKX": "xk", "MKD": "mk", "CZE": "cz", "IRL": "ie",
+    "NCL": "nc", "JAM": "jm", "BOL": "bo", "SUR": "sr",
+}
+
+
+def flag_img(code: str, size: int = 20) -> str:
+    """Return an HTML <img> tag for a country flag via flagcdn.com.
+    Falls back to empty string if code is unknown."""
+    iso2 = _FIFA_TO_ISO2.get(code, "")
+    if not iso2:
+        return ""
+    return (
+        f'<img src="https://flagcdn.com/w{size}/{iso2}.png" '
+        f'width="{size}" style="vertical-align:middle;margin-right:4px" '
+        f'alt="{code}">'
+    )
+
+# ---------------------------------------------------------------------------
 # CSS theme — WCAG AA compliant contrast
 # ---------------------------------------------------------------------------
 
@@ -311,7 +344,7 @@ def render_setup_screen():
                     if slot_info:
                         candidates = slot_info["candidates"]
                         candidate_labels = [
-                            f"{TEAMS[c]['flag']} {TEAMS[c]['name']}"
+                            f"{TEAMS[c]['name']}"
                             for c in candidates
                         ]
                         st.markdown(
@@ -331,7 +364,7 @@ def render_setup_screen():
                         t = TEAMS.get(code, {})
                         st.markdown(
                             f'<div class="setup-team-confirmed">'
-                            f'{t.get("flag", "")} {t.get("name", code)}</div>',
+                            f'{flag_img(code)} {t.get("name", code)}</div>',
                             unsafe_allow_html=True,
                         )
 
@@ -741,9 +774,9 @@ def render_bracket(
         bold_a = "**" if m.winner == m.team_a else ""
         bold_b = "**" if m.winner == m.team_b else ""
         st.markdown(
-            f"**Third-Place Match:** {ta.get('flag', '')} {bold_a}{ta.get('name', '')}{bold_a}"
+            f"**Third-Place Match:** {bold_a}{ta.get('name', '')}{bold_a}"
             f" `{total_a}-{total_b}` "
-            f"{bold_b}{tb.get('name', '')}{bold_b} {tb.get('flag', '')}{extra}"
+            f"{bold_b}{tb.get('name', '')}{bold_b}{extra}"
         )
 
 
@@ -767,7 +800,7 @@ def render_group_table(
         qualifier = " ✅" if i < 2 else ""
         rows.append({
             "#": i + 1,
-            "Team": f"{t.get('flag', '')} {t.get('name', s.team)}{qualifier}",
+            "Team": f"{t.get('name', s.team)}{qualifier}",
             "P": s.played, "W": s.wins, "D": s.draws, "L": s.losses,
             "GF": s.gf, "GA": s.ga, "GD": s.gd, "Pts": s.points,
         })
@@ -804,7 +837,7 @@ def render_monte_carlo(mc_data: dict, teams: dict[str, dict]):
 
     top10 = sorted(win_probs.items(), key=lambda x: x[1], reverse=True)[:10]
     chart_data = pd.DataFrame({
-        "Team": [f"{teams[c]['flag']} {teams[c]['name']}" for c, _ in top10],
+        "Team": [f"{teams[c]['name']}" for c, _ in top10],
         "Win %": [p for _, p in top10],
     })
     st.bar_chart(chart_data, x="Team", y="Win %", color="#FFD700")
@@ -814,8 +847,8 @@ def render_monte_carlo(mc_data: dict, teams: dict[str, dict]):
         ta = teams.get(pair[0], {})
         tb = teams.get(pair[1], {})
         st.markdown(
-            f"**Most Likely Final:** {ta.get('flag', '')} {ta.get('name', pair[0])} "
-            f"vs {tb.get('name', pair[1])} {tb.get('flag', '')} "
+            f"**Most Likely Final:** {ta.get('name', pair[0])} "
+            f"vs {tb.get('name', pair[1])} "
             f"({mc_data['most_likely_final_pct']:.1f}%)"
         )
 
@@ -829,7 +862,7 @@ def render_monte_carlo(mc_data: dict, teams: dict[str, dict]):
     )
     for code in sorted_teams:
         t = teams.get(code, {})
-        row = {"Team": f"{t.get('flag', '')} {t.get('name', code)}"}
+        row = {"Team": f"{t.get('name', code)}"}
         for s in stages:
             row[s] = f"{stage_probs[code].get(s, 0):.1f}%"
         rows.append(row)
@@ -978,8 +1011,7 @@ def generate_mc_narration(mc_data: dict, teams: dict[str, dict]) -> str:
     for i, (code, pct) in enumerate(top5):
         t = teams.get(code, {})
         name = t.get("name", code)
-        flag = t.get("flag", "")
-        parts.append(f"{i+1}. {flag} {name} — {pct:.1f}%")
+        parts.append(f"{i+1}. {name} — {pct:.1f}%")
 
     # Most likely final matchup
     if mc_data.get("most_likely_final"):
@@ -987,8 +1019,8 @@ def generate_mc_narration(mc_data: dict, teams: dict[str, dict]) -> str:
         ta = teams.get(pair[0], {})
         tb = teams.get(pair[1], {})
         parts.append(
-            f"\nThe dream final? {ta.get('flag', '')} {ta.get('name', pair[0])} versus "
-            f"{tb.get('name', pair[1])} {tb.get('flag', '')} — that matchup came up "
+            f"\nThe dream final? {ta.get('name', pair[0])} versus "
+            f"{tb.get('name', pair[1])} — that matchup came up "
             f"{mc_data['most_likely_final_pct']:.1f}% of the time!"
         )
 
@@ -1002,7 +1034,7 @@ def generate_mc_narration(mc_data: dict, teams: dict[str, dict]) -> str:
         dh_code, dh_pct = dark_horses[0]
         dh = teams.get(dh_code, {})
         parts.append(
-            f"\nDark horse alert! {dh.get('flag', '')} {dh.get('name', dh_code)} "
+            f"\nDark horse alert! {dh.get('name', dh_code)} "
             f"(FIFA #{dh.get('fifa_ranking', '?')}) are winning it in {dh_pct:.1f}% "
             f"of simulations — don't sleep on them!"
         )
@@ -1018,7 +1050,7 @@ def generate_mc_narration(mc_data: dict, teams: dict[str, dict]) -> str:
         top3_sf = sf_regulars[:3]
         if top3_sf:
             sf_names = ", ".join(
-                f"{teams.get(c, {}).get('flag', '')} {teams.get(c, {}).get('name', c)} ({p:.1f}%)"
+                f"{teams.get(c, {}).get('name', c)} ({p:.1f}%)"
                 for c, p in top3_sf
             )
             parts.append(

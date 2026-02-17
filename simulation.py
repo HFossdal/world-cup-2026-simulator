@@ -402,10 +402,13 @@ def simulate_group_stage(
     teams: dict[str, dict],
     groups: dict[str, list[str]] | None = None,
     locked_results: dict[tuple[str, str], tuple[int, int]] | None = None,
+    round_constraints: dict | None = None,
 ) -> tuple[dict[str, list[GroupStanding]], dict[str, list[MatchResult]]]:
     """Simulate the full group stage. Returns tables and match results."""
     groups = groups or GROUPS
     locked_results = locked_results or {}
+    round_constraints = round_constraints or {}
+    force_group_winners: set[str] = round_constraints.get("force_group_winner", set())
     all_tables: dict[str, list[GroupStanding]] = {}
     all_matches: dict[str, list[MatchResult]] = {}
 
@@ -481,6 +484,13 @@ def simulate_group_stage(
             ),
             reverse=True,
         )
+
+        # Apply force_group_winner: move target team to 1st if not already
+        for idx, standing in enumerate(table):
+            if standing.team in force_group_winners and idx != 0:
+                table.insert(0, table.pop(idx))
+                break
+
         all_tables[group_letter] = table
         all_matches[group_letter] = matches
 
@@ -533,12 +543,55 @@ def _resolve_slot(
     return tables[group][position].team
 
 
+def _knockout_match(
+    teams: dict[str, dict],
+    code_a: str,
+    code_b: str,
+    force_exit_teams: set[str],
+    generate_commentary: bool = False,
+) -> MatchResult:
+    """Simulate a knockout match, applying force_exit constraints.
+    If one team is forced out but the other isn't, the non-forced team wins.
+    If both or neither are forced out, simulate normally."""
+    a_forced = code_a in force_exit_teams
+    b_forced = code_b in force_exit_teams
+
+    if a_forced and not b_forced:
+        return MatchResult(
+            team_a=code_a, team_b=code_b,
+            score_a=0, score_b=1, winner=code_b,
+        )
+    if b_forced and not a_forced:
+        return MatchResult(
+            team_a=code_a, team_b=code_b,
+            score_a=1, score_b=0, winner=code_a,
+        )
+    return simulate_match(
+        teams[code_a], teams[code_b],
+        neutral=True, allow_draw=False,
+        generate_commentary=generate_commentary,
+    )
+
+
 def simulate_knockout_stage(
     teams: dict[str, dict],
     tables: dict[str, list[GroupStanding]],
     third_place_standings: list[GroupStanding],
+    round_constraints: dict | None = None,
 ) -> TournamentResult:
     """Simulate the entire knockout stage from R32 to Final."""
+    round_constraints = round_constraints or {}
+    raw_exit = round_constraints.get("force_exit", {})
+
+    # Build cumulative exit sets: a team forced out in R16 is also
+    # forced out in every later round (they can never advance past that point).
+    round_order = ["R32", "R16", "QF", "SF", "Final"]
+    force_exit: dict[str, set[str]] = {}
+    cumulative: set[str] = set()
+    for rnd in round_order:
+        cumulative = cumulative | raw_exit.get(rnd, set())
+        if cumulative:
+            force_exit[rnd] = set(cumulative)
 
     # Determine which groups' third-place teams qualified
     third_groups: list[str] = []
@@ -551,6 +604,7 @@ def simulate_knockout_stage(
     third_place_assignment = assign_third_place_teams(sorted(third_groups))
 
     # --- Round of 32 ---
+    r32_exit = force_exit.get("R32", set())
     r32_matches: list[MatchResult] = []
     r32_winners: dict[int, str] = {}
 
@@ -561,14 +615,12 @@ def simulate_knockout_stage(
         if team_a_code == "TBD" or team_b_code == "TBD":
             continue
 
-        result = simulate_match(
-            teams[team_a_code], teams[team_b_code],
-            neutral=True, allow_draw=False,
-        )
+        result = _knockout_match(teams, team_a_code, team_b_code, r32_exit)
         r32_matches.append(result)
         r32_winners[match["id"]] = result.winner
 
     # --- Round of 16 ---
+    r16_exit = force_exit.get("R16", set())
     r32_match_ids = [m["id"] for m in ROUND_OF_32]
     r16_matches: list[MatchResult] = []
     r16_winners: list[str] = []
@@ -583,37 +635,30 @@ def simulate_knockout_stage(
         if not winner_a or not winner_b:
             continue
 
-        result = simulate_match(
-            teams[winner_a], teams[winner_b],
-            neutral=True, allow_draw=False,
-        )
+        result = _knockout_match(teams, winner_a, winner_b, r16_exit)
         r16_matches.append(result)
         r16_winners.append(result.winner)
 
     # --- Quarterfinals ---
+    qf_exit = force_exit.get("QF", set())
     qf_matches: list[MatchResult] = []
     qf_winners: list[str] = []
 
     for idx_a, idx_b in QF_FEEDS:
         if idx_a < len(r16_winners) and idx_b < len(r16_winners):
-            result = simulate_match(
-                teams[r16_winners[idx_a]], teams[r16_winners[idx_b]],
-                neutral=True, allow_draw=False,
-            )
+            result = _knockout_match(teams, r16_winners[idx_a], r16_winners[idx_b], qf_exit)
             qf_matches.append(result)
             qf_winners.append(result.winner)
 
     # --- Semifinals ---
+    sf_exit = force_exit.get("SF", set())
     sf_matches: list[MatchResult] = []
     sf_winners: list[str] = []
     sf_losers: list[str] = []
 
     for idx_a, idx_b in SF_FEEDS:
         if idx_a < len(qf_winners) and idx_b < len(qf_winners):
-            result = simulate_match(
-                teams[qf_winners[idx_a]], teams[qf_winners[idx_b]],
-                neutral=True, allow_draw=False,
-            )
+            result = _knockout_match(teams, qf_winners[idx_a], qf_winners[idx_b], sf_exit)
             sf_matches.append(result)
             sf_winners.append(result.winner)
             loser = result.team_a if result.winner == result.team_b else result.team_b
@@ -628,14 +673,14 @@ def simulate_knockout_stage(
         )
 
     # --- Final ---
+    final_exit = force_exit.get("Final", set())
     final_match = None
     champion = None
     runner_up = None
 
     if len(sf_winners) == 2:
-        final_match = simulate_match(
-            teams[sf_winners[0]], teams[sf_winners[1]],
-            neutral=True, allow_draw=False,
+        final_match = _knockout_match(
+            teams, sf_winners[0], sf_winners[1], final_exit,
             generate_commentary=True,
         )
         champion = final_match.winner
@@ -667,12 +712,17 @@ def simulate_tournament(
     teams: dict[str, dict],
     groups: dict[str, list[str]] | None = None,
     locked_results: dict | None = None,
+    round_constraints: dict | None = None,
 ) -> TournamentResult:
     """Simulate the full FIFA World Cup 2026 tournament."""
-    tables, group_matches = simulate_group_stage(teams, groups, locked_results)
+    tables, group_matches = simulate_group_stage(
+        teams, groups, locked_results, round_constraints,
+    )
     third_place_standings = get_best_third_place(tables, teams)
 
-    result = simulate_knockout_stage(teams, tables, third_place_standings)
+    result = simulate_knockout_stage(
+        teams, tables, third_place_standings, round_constraints,
+    )
     result.group_matches = group_matches
     result.group_tables = tables
     result.third_place_ranking = third_place_standings
@@ -689,6 +739,7 @@ def run_monte_carlo(
     n: int = 1000,
     groups: dict[str, list[str]] | None = None,
     locked_results: dict | None = None,
+    round_constraints: dict | None = None,
 ) -> dict:
     """Run n simulations and return probability data for each team."""
     groups = groups or GROUPS
@@ -703,7 +754,7 @@ def run_monte_carlo(
     final_matchups: dict[tuple[str, str], int] = {}
 
     for _ in range(n):
-        result = simulate_tournament(teams, groups, locked_results)
+        result = simulate_tournament(teams, groups, locked_results, round_constraints)
 
         # Determine which teams reached each stage
         r32_teams = set()

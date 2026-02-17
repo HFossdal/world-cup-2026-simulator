@@ -54,23 +54,28 @@ def speak(text: str) -> bytes | None:
     """Generate TTS audio bytes via ElevenLabs. Returns None on failure."""
     api_key = os.getenv("ELEVENLABS_API_KEY", "")
     if not api_key or not ELEVENLABS_AVAILABLE:
+        print("[TTS] Skipped — no API key or elevenlabs not installed")
         return None
     try:
         client = ElevenLabsClient(api_key=api_key)
+        print(f"[TTS] Calling ElevenLabs — voice_id=bVM5MBBFUy5Uve0cooHn, text length={len(text)}")
         audio_iter = client.text_to_speech.convert(
-            voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel
+            voice_id="bVM5MBBFUy5Uve0cooHn",
             text=text,
             model_id="eleven_multilingual_v2",
         )
-        return b"".join(audio_iter)
-    except Exception:
+        audio_bytes = b"".join(audio_iter)
+        print(f"[TTS] Success — {len(audio_bytes)} bytes of audio")
+        return audio_bytes
+    except Exception as e:
+        print(f"[TTS] ERROR: {type(e).__name__}: {e}")
         return None
 
 
-def autoplay_audio(audio_bytes: bytes):
-    """Embed an autoplay HTML audio element in Streamlit."""
+def play_audio(placeholder, audio_bytes: bytes):
+    """Play audio through the single placeholder. Browser stops naturally."""
     b64 = base64.b64encode(audio_bytes).decode()
-    st.markdown(
+    placeholder.markdown(
         f'<audio autoplay><source src="data:audio/mpeg;base64,{b64}" '
         f'type="audio/mpeg"></audio>',
         unsafe_allow_html=True,
@@ -110,6 +115,10 @@ st.set_page_config(
 
 inject_css()
 
+# Single audio placeholder — the ONLY element that ever holds <audio> HTML.
+# Overwritten each time, cleared after playback, so reruns never replay.
+audio_placeholder = st.empty()
+
 # ---------------------------------------------------------------------------
 # Session state
 # ---------------------------------------------------------------------------
@@ -123,6 +132,8 @@ if "teams" not in st.session_state:
     st.session_state.teams = get_teams_copy()
 if "locked_results" not in st.session_state:
     st.session_state.locked_results = {}
+if "round_constraints" not in st.session_state:
+    st.session_state.round_constraints = {}
 if "tournament_result" not in st.session_state:
     st.session_state.tournament_result = None
 if "mc_data" not in st.session_state:
@@ -135,12 +146,12 @@ if "change_log" not in st.session_state:
     st.session_state.change_log = []
 if "muted" not in st.session_state:
     st.session_state.muted = False
-if "pending_audio" not in st.session_state:
-    st.session_state.pending_audio = None
 if "highlight_team" not in st.session_state:
     st.session_state.highlight_team = None
 if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = None
+if "last_audio_played" not in st.session_state:
+    st.session_state.last_audio_played = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -177,7 +188,7 @@ with st.sidebar:
 
     if st.button("🏆 Simulate Tournament", use_container_width=True, type="primary"):
         with st.spinner("Simulating..."):
-            result = simulate_tournament(teams, active_groups, st.session_state.locked_results)
+            result = simulate_tournament(teams, active_groups, st.session_state.locked_results, st.session_state.round_constraints)
             st.session_state.tournament_result = result
             st.session_state.mc_data = None
             st.session_state.highlight_team = None
@@ -185,14 +196,12 @@ with st.sidebar:
             st.session_state.chat_history.append(
                 {"role": "assistant", "content": narration}
             )
-            if not st.session_state.muted:
-                st.session_state.pending_audio = narration
         st.rerun()
 
     mc_n = st.select_slider("Monte Carlo runs", [100, 500, 1000, 5000], 1000)
     if st.button(f"📊 Run {mc_n} Simulations", use_container_width=True):
         with st.spinner(f"Running {mc_n} sims..."):
-            mc_data = run_monte_carlo(teams, mc_n, active_groups, st.session_state.locked_results)
+            mc_data = run_monte_carlo(teams, mc_n, active_groups, st.session_state.locked_results, st.session_state.round_constraints)
             st.session_state.mc_data = mc_data
             st.session_state.tournament_result = None
             st.session_state.highlight_team = None
@@ -200,8 +209,6 @@ with st.sidebar:
             st.session_state.chat_history.append(
                 {"role": "assistant", "content": narration}
             )
-            if not st.session_state.muted:
-                st.session_state.pending_audio = narration
         st.rerun()
 
     st.markdown("---")
@@ -209,6 +216,7 @@ with st.sidebar:
         sels = st.session_state.playoff_selections
         st.session_state.teams = get_teams_copy(sels)
         st.session_state.locked_results = {}
+        st.session_state.round_constraints = {}
         st.session_state.change_log = []
         st.session_state.tournament_result = None
         st.session_state.mc_data = None
@@ -297,14 +305,6 @@ for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Play any pending audio (from previous run)
-if st.session_state.pending_audio and not st.session_state.muted:
-    with st.spinner("Generating commentary..."):
-        audio_bytes = speak(st.session_state.pending_audio)
-    if audio_bytes:
-        autoplay_audio(audio_bytes)
-    st.session_state.pending_audio = None
-
 # Resolve user input: pending chip prompt takes priority over chat_input
 user_input = None
 if st.session_state.pending_prompt:
@@ -317,77 +317,118 @@ else:
 if user_input:
     user_input = user_input.strip()
 if user_input:
-    # Show user message
-    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    # New scenario — clear any previous audio and reset tracking
+    audio_placeholder.empty()
+    st.session_state.last_audio_played = None
 
-    # Extract focused team from user message (for bracket highlighting)
+    # ── Render user message ──
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
     focused = extract_focused_team(user_input, teams)
     if focused:
         st.session_state.highlight_team = focused
 
-    # ── Step 1: Mistral confirms scenario ──
+    # ── 1. Mistral generates intro ──
+    want_voice = not st.session_state.muted
     with st.spinner("Mistral AI is analyzing..."):
         response = agent.chat(user_input, teams)
+
+    # ── 2. Display intro text (no audio) ──
     st.session_state.chat_history.append(
         {"role": "assistant", "content": response.message}
     )
-    # Voice: speak the confirmation
-    if not st.session_state.muted and response.message:
-        st.session_state.pending_audio = response.message
+    with st.chat_message("assistant"):
+        st.markdown(response.message)
 
     # Handle reset
     if response.should_reset:
         sels = st.session_state.playoff_selections
         st.session_state.teams = get_teams_copy(sels)
         st.session_state.locked_results = {}
+        st.session_state.round_constraints = {}
         st.session_state.change_log = []
         st.session_state.highlight_team = None
         teams = st.session_state.teams
+        reset_msg = "All modifications reset to baseline."
         st.session_state.chat_history.append(
-            {"role": "assistant", "content": "All modifications reset to baseline."}
+            {"role": "assistant", "content": reset_msg}
         )
+        with st.chat_message("assistant"):
+            st.markdown(reset_msg)
 
     # Apply modifications
     if response.modifications:
-        teams, changes, new_locks = apply_modifications(teams, response.modifications)
+        teams, changes, new_locks, new_constraints = apply_modifications(teams, response.modifications)
         st.session_state.teams = teams
         st.session_state.locked_results.update(new_locks)
+        if new_constraints.get("force_exit"):
+            existing = st.session_state.round_constraints.get("force_exit", {})
+            for rnd, team_set in new_constraints["force_exit"].items():
+                if rnd not in existing:
+                    existing[rnd] = set()
+                existing[rnd].update(team_set)
+            st.session_state.round_constraints["force_exit"] = existing
+        if new_constraints.get("force_group_winner"):
+            existing_gw = st.session_state.round_constraints.get("force_group_winner", set())
+            existing_gw.update(new_constraints["force_group_winner"])
+            st.session_state.round_constraints["force_group_winner"] = existing_gw
         st.session_state.change_log.extend(changes)
         if changes:
+            applied_msg = "**Applied:** " + " | ".join(changes)
             st.session_state.chat_history.append(
-                {"role": "assistant", "content": "**Applied:** " + " | ".join(changes)}
+                {"role": "assistant", "content": applied_msg}
             )
+            with st.chat_message("assistant"):
+                st.markdown(applied_msg)
 
-    # ── Step 2 & 3: Simulate silently → narrate key findings ──
+    # ── 3. Run simulation ──
     if response.should_simulate:
-        if response.sim_mode == "monte_carlo":
-            with st.spinner(f"Running {response.sim_n} simulations..."):
-                mc_data = run_monte_carlo(
-                    teams, response.sim_n, active_groups, st.session_state.locked_results
-                )
-                st.session_state.mc_data = mc_data
-                st.session_state.tournament_result = None
-                narration = generate_mc_narration(mc_data, teams)
-                st.session_state.chat_history.append(
-                    {"role": "assistant", "content": narration}
-                )
-                if not st.session_state.muted:
-                    st.session_state.pending_audio = narration
-        else:
-            with st.spinner("Simulating tournament..."):
-                result = simulate_tournament(
-                    teams, active_groups, st.session_state.locked_results
-                )
-                st.session_state.tournament_result = result
-                narration = generate_narration(result, teams)
-                st.session_state.chat_history.append(
-                    {"role": "assistant", "content": narration}
-                )
-                if not st.session_state.muted:
-                    st.session_state.pending_audio = narration
+        sim_label = (
+            f"Running {response.sim_n} simulations..."
+            if response.sim_mode == "monte_carlo"
+            else "Simulating tournament..."
+        )
 
-    # ── Rerun for follow-up ──
-    st.rerun()
+        with st.spinner(sim_label):
+            if response.sim_mode == "monte_carlo":
+                sim_result = run_monte_carlo(
+                    teams, response.sim_n, active_groups,
+                    st.session_state.locked_results,
+                    st.session_state.round_constraints,
+                )
+            else:
+                sim_result = simulate_tournament(
+                    teams, active_groups,
+                    st.session_state.locked_results,
+                    st.session_state.round_constraints,
+                )
+
+        # ── 4. Generate results narration + audio (nothing shown yet) ──
+        if response.sim_mode == "monte_carlo":
+            st.session_state.mc_data = sim_result
+            st.session_state.tournament_result = None
+            narration = generate_mc_narration(sim_result, teams)
+        else:
+            st.session_state.tournament_result = sim_result
+            narration = generate_narration(sim_result, teams)
+
+        # ── 4b. Display results text immediately ──
+        st.session_state.chat_history.append(
+            {"role": "assistant", "content": narration}
+        )
+        with st.chat_message("assistant"):
+            st.markdown(narration)
+
+        # ── 5. Generate results audio + play (intro already finished) ──
+        if want_voice and narration and st.session_state.last_audio_played != "results":
+            results_audio = None
+            with st.spinner("Generating commentary..."):
+                results_audio = speak(narration)
+            if results_audio:
+                play_audio(audio_placeholder, results_audio)
+                st.session_state.last_audio_played = "results"
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +456,7 @@ if st.session_state.tournament_result:
                 t = teams.get(s.team, {})
                 icon = "✅" if i < 8 else "❌"
                 st.markdown(
-                    f"{icon} {t.get('flag', '')} {t.get('name', s.team)} — "
+                    f"{icon} {t.get('name', s.team)} — "
                     f"{s.points}pts, GD {s.gd:+d}"
                 )
 

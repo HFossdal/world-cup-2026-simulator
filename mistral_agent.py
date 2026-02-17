@@ -65,7 +65,17 @@ containing the modifications, followed by a plain-English explanation.
    {{"action": "simulate", "mode": "monte_carlo", "n": 1000}}
    ```
 
-6. **reset** — Reset all modifications back to baseline.
+6. **force_round_exit** — Force specific teams to lose in a given knockout round (R32, R16, QF, SF, Final). Use this for "what if favorites lose" or "what if team X is eliminated in round Y" scenarios. **You must resolve which teams count as "favorites" or "top teams" yourself** by picking the strongest team codes.
+   ```json
+   {{"action": "force_round_exit", "round": "R16", "teams": ["ARG", "FRA", "BRA", "ENG", "ESP", "GER", "POR", "NED"]}}
+   ```
+
+7. **force_group_winner** — Force a team to finish 1st in their group, regardless of simulation results.
+   ```json
+   {{"action": "force_group_winner", "team": "NOR"}}
+   ```
+
+8. **reset** — Reset all modifications back to baseline.
    ```json
    {{"action": "reset"}}
    ```
@@ -82,8 +92,10 @@ You can chain multiple actions in an array: ```json [action1, action2, ...]```.
 - For injury scenarios, reduce the team's attack (for forwards) or defense (for defenders) by 0.10-0.25.
 - For "what if they win", lock the result and suggest re-simulating.
 - For probability questions, suggest running Monte Carlo (1000 sims).
+- For "favorites lose" or "upsets" scenarios, use **force_round_exit** with the specific team codes of the top-rated teams. Pick roughly the top 8 teams by strength. Always include a simulate action after force_round_exit.
+- For "team X wins their group", use **force_group_winner**. Always include a simulate action after.
 - Always explain your reasoning clearly.
-- **Write like a sports commentator!** Be excited, dynamic, and enthusiastic. Use punchy language and football terminology. Never be robotic or dry. Your responses will be spoken aloud by a voice narrator, so make them sound natural and thrilling.
+- **Write like an energetic sports commentator!** Be excited, dynamic, and full of passion. Use punchy language and football terminology. Your responses will be spoken aloud by a voice narrator, so make them sound natural and thrilling. Never be robotic or dry.
 - Example tone: "Great shout! Let's see what happens if the Seleção get a 20% power boost — they'll be absolutely terrifying going forward!"
 - If user wants to reset, include the reset action.
 """
@@ -377,11 +389,15 @@ class MistralScenarioAgent:
 def apply_modifications(
     teams: dict[str, dict],
     modifications: list[ScenarioModification],
-) -> tuple[dict[str, dict], list[str], dict[tuple[str, str], tuple[int, int]]]:
+) -> tuple[dict[str, dict], list[str], dict[tuple[str, str], tuple[int, int]], dict]:
     """Apply scenario modifications to team data. Returns modified teams,
-    a log of changes, and any locked results."""
+    a log of changes, locked results, and round constraints."""
     locked_results: dict[tuple[str, str], tuple[int, int]] = {}
     change_log: list[str] = []
+    round_constraints: dict = {
+        "force_exit": {},        # round_name -> set of team codes
+        "force_group_winner": set(),  # set of team codes
+    }
 
     for mod in modifications:
         action = mod.action
@@ -431,4 +447,24 @@ def apply_modifications(
                 tb_name = teams.get(tb, {}).get("name", tb)
                 change_log.append(f"Locked result: {ta_name} {sa}-{sb} {tb_name}")
 
-    return teams, change_log, locked_results
+        elif action == "force_round_exit":
+            rnd = p.get("round", "")
+            team_list = p.get("teams", [])
+            if rnd and team_list:
+                if rnd not in round_constraints["force_exit"]:
+                    round_constraints["force_exit"][rnd] = set()
+                round_constraints["force_exit"][rnd].update(team_list)
+                names = [teams.get(c, {}).get("name", c) for c in team_list]
+                change_log.append(
+                    f"Forced exit in {rnd}: {', '.join(names)}"
+                )
+
+        elif action == "force_group_winner":
+            code = p.get("team", "")
+            if code in teams:
+                round_constraints["force_group_winner"].add(code)
+                change_log.append(
+                    f"Forced group winner: {teams[code]['name']}"
+                )
+
+    return teams, change_log, locked_results, round_constraints
