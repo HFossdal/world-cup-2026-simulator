@@ -20,6 +20,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+# --- Streamlit Cloud: mirror secrets into env (so os.getenv keeps working) ---
+def _mirror_secrets_to_env(keys: list[str]) -> None:
+    for k in keys:
+        # st.secrets.get returns None if missing
+        v = st.secrets.get(k, None)
+        if v and not os.getenv(k):
+            os.environ[k] = str(v)
+
+_mirror_secrets_to_env(["MISTRAL_API_KEY", "ELEVENLABS_API_KEY"])
+
 from data import TEAMS, GROUPS, get_teams_copy, get_groups_copy, PLAYOFF_SLOTS
 from simulation import (
     simulate_match,
