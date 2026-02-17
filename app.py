@@ -36,6 +36,7 @@ from ui import (
     generate_narration,
     generate_mc_narration,
     render_setup_screen,
+    render_scenario_chips,
 )
 
 # ---------------------------------------------------------------------------
@@ -138,6 +139,8 @@ if "pending_audio" not in st.session_state:
     st.session_state.pending_audio = None
 if "highlight_team" not in st.session_state:
     st.session_state.highlight_team = None
+if "pending_prompt" not in st.session_state:
+    st.session_state.pending_prompt = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -258,16 +261,36 @@ with col_mute:
         st.rerun()
 
 # ---------------------------------------------------------------------------
+# API key banners (main area)
+# ---------------------------------------------------------------------------
+if not agent.is_available:
+    st.warning(
+        "Mistral API key not found. Add `MISTRAL_API_KEY` to your `.env` file "
+        "to enable AI-powered scenario analysis. Fallback keyword parsing is active.",
+        icon="⚠️",
+    )
+el_key = os.getenv("ELEVENLABS_API_KEY", "")
+if not el_key or not ELEVENLABS_AVAILABLE:
+    st.info(
+        "Voice narration disabled. Add `ELEVENLABS_API_KEY` to enable commentary.",
+        icon="🔇",
+    )
+
+# ---------------------------------------------------------------------------
 # Chat section
 # ---------------------------------------------------------------------------
 
 st.markdown("---")
 st.markdown("### 🤖 Scenario Chat")
 st.caption(
-    "Ask what-if questions: *\"What if Norway beats France?\"* · "
-    "*\"Make Brazil 20% stronger\"* · *\"Show me the most likely winners\"* · "
-    "*\"Reset to baseline\"*"
+    "Ask what-if questions, or click an example below to get started:"
 )
+
+# Example scenario chips
+chip_prompt = render_scenario_chips()
+if chip_prompt:
+    st.session_state.pending_prompt = chip_prompt
+    st.rerun()
 
 # Display chat history
 for msg in st.session_state.chat_history:
@@ -276,13 +299,24 @@ for msg in st.session_state.chat_history:
 
 # Play any pending audio (from previous run)
 if st.session_state.pending_audio and not st.session_state.muted:
-    audio_bytes = speak(st.session_state.pending_audio)
+    with st.spinner("Generating commentary..."):
+        audio_bytes = speak(st.session_state.pending_audio)
     if audio_bytes:
         autoplay_audio(audio_bytes)
     st.session_state.pending_audio = None
 
-# Chat input
-if user_input := st.chat_input("Ask a what-if scenario..."):
+# Resolve user input: pending chip prompt takes priority over chat_input
+user_input = None
+if st.session_state.pending_prompt:
+    user_input = st.session_state.pending_prompt
+    st.session_state.pending_prompt = None
+else:
+    user_input = st.chat_input("Ask a what-if scenario...")
+
+# Process user input (from chip click or typed message)
+if user_input:
+    user_input = user_input.strip()
+if user_input:
     # Show user message
     st.session_state.chat_history.append({"role": "user", "content": user_input})
 
@@ -292,7 +326,8 @@ if user_input := st.chat_input("Ask a what-if scenario..."):
         st.session_state.highlight_team = focused
 
     # ── Step 1: Mistral confirms scenario ──
-    response = agent.chat(user_input, teams)
+    with st.spinner("Mistral AI is analyzing..."):
+        response = agent.chat(user_input, teams)
     st.session_state.chat_history.append(
         {"role": "assistant", "content": response.message}
     )
@@ -332,7 +367,6 @@ if user_input := st.chat_input("Ask a what-if scenario..."):
                 )
                 st.session_state.mc_data = mc_data
                 st.session_state.tournament_result = None
-                # Step 3: Narrate key findings
                 narration = generate_mc_narration(mc_data, teams)
                 st.session_state.chat_history.append(
                     {"role": "assistant", "content": narration}
@@ -345,7 +379,6 @@ if user_input := st.chat_input("Ask a what-if scenario..."):
                     teams, active_groups, st.session_state.locked_results
                 )
                 st.session_state.tournament_result = result
-                # Step 3: Narrate champion's path
                 narration = generate_narration(result, teams)
                 st.session_state.chat_history.append(
                     {"role": "assistant", "content": narration}
@@ -353,7 +386,7 @@ if user_input := st.chat_input("Ask a what-if scenario..."):
                 if not st.session_state.muted:
                     st.session_state.pending_audio = narration
 
-    # ── Step 5: Rerun for follow-up ──
+    # ── Rerun for follow-up ──
     st.rerun()
 
 

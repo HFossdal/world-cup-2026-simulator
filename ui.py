@@ -217,6 +217,29 @@ div[data-baseweb="select"] ul {
 .stApp div[data-baseweb="select"] svg {
     fill: #555555 !important;
 }
+
+/* ── Scenario chips (pill-shaped buttons) ────────────────────── */
+/* Marker-based targeting: a hidden .chip-marker div sits in one
+   Streamlit element container; the columns with buttons are in the
+   next sibling container.  :has() lets us reach across. */
+div:has(> div > .chip-marker) + div .stButton > button {
+    background: #2d4a2d !important;
+    color: #FFD700 !important;
+    border: 1px solid #3d6a3d !important;
+    border-radius: 20px !important;
+    padding: 4px 14px !important;
+    font-size: 0.82rem !important;
+    white-space: nowrap !important;
+    min-height: 0 !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+}
+div:has(> div > .chip-marker) + div .stButton > button:hover {
+    background: #FFD700 !important;
+    color: #0d1f0d !important;
+    border-color: #FFD700 !important;
+}
+.chip-marker { display: none; }
 </style>
 """
 
@@ -353,6 +376,34 @@ def render_header():
         """,
         unsafe_allow_html=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Scenario example chips
+# ---------------------------------------------------------------------------
+
+EXAMPLE_SCENARIOS: list[str] = [
+    "What if Norway wins all their group games?",
+    "Simulate 100 runs with Brazil weakened by 20%",
+    "What are France's chances if Mbappe is injured?",
+    "Run 1000 simulations and show me the top 10 winners",
+    "What if all the favorites lose in the Round of 16?",
+]
+
+
+def render_scenario_chips() -> str | None:
+    """Render clickable example scenario pills. Returns the chosen prompt
+    text if a chip was clicked, or None."""
+    clicked: str | None = None
+    # Hidden marker div — CSS :has() selector uses this to target the
+    # sibling columns container and style buttons as pills.
+    st.markdown('<div class="chip-marker"></div>', unsafe_allow_html=True)
+    cols = st.columns(len(EXAMPLE_SCENARIOS))
+    for i, (col, prompt) in enumerate(zip(cols, EXAMPLE_SCENARIOS)):
+        with col:
+            if st.button(prompt, key=f"chip_{i}", use_container_width=True):
+                clicked = prompt
+    return clicked
 
 
 # ---------------------------------------------------------------------------
