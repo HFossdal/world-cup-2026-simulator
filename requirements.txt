@@ -3,3 +3,8 @@ pandas>=2.0.0
 mistralai>=1.0.0
 python-dotenv>=1.0.0
 elevenlabs>=1.0.0
+
+# Backtesting / MLE fit
+numpy>=1.23
+scipy>=1.10
+matplotlib>=3.7

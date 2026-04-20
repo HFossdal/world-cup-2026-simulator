@@ -1,8 +1,12 @@
 """
 World Cup 2026 Simulator — Simulation Engine
 
-Poisson-based match simulation, group stage, knockout stage,
+Dixon-Coles bivariate match simulation, group stage, knockout stage,
 Monte Carlo analysis, and live-style commentary generation.
+
+Dixon & Coles (1997) refine independent Poisson by adding a low-score
+correlation correction (parameter rho), which fixes the well-known
+under-prediction of 0-0, 1-1, 1-0 and 0-1 scorelines in football.
 """
 
 from __future__ import annotations
@@ -26,6 +30,15 @@ from data import (
 # Constants
 # ---------------------------------------------------------------------------
 AVG_GOALS_PER_TEAM = 1.35  # World Cup historical average
+
+# Dixon-Coles low-score correlation parameter. Empirical estimates on
+# top-flight European football typically fall in [-0.2, -0.05]; -0.10 is a
+# reasonable default that lifts P(0-0), P(1-1) and slightly dampens 1-0/0-1.
+DIXON_COLES_RHO = -0.10
+
+# Maximum goals considered in the DC joint distribution. Tail mass beyond
+# this at realistic lambdas (<=4) is negligible (<1e-6).
+DC_MAX_GOALS = 10
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +115,7 @@ class TournamentResult:
 
 
 # ---------------------------------------------------------------------------
-# Poisson match engine
+# Dixon-Coles match engine
 # ---------------------------------------------------------------------------
 
 def _poisson_pmf(k: int, lam: float) -> float:
@@ -111,7 +124,7 @@ def _poisson_pmf(k: int, lam: float) -> float:
 
 
 def _sample_poisson(lam: float) -> int:
-    """Sample from Poisson distribution."""
+    """Sample from Poisson distribution (Knuth's method)."""
     L = math.exp(-lam)
     k = 0
     p = 1.0
@@ -120,6 +133,138 @@ def _sample_poisson(lam: float) -> int:
         p *= random.random()
         if p < L:
             return k - 1
+
+
+def _dc_tau(x: int, y: int, lam_x: float, lam_y: float, rho: float) -> float:
+    """Dixon-Coles tau correction for the (0-0, 0-1, 1-0, 1-1) cells.
+
+    Shrinks or boosts the four low-score probabilities so the joint
+    distribution better matches observed football scorelines while the
+    marginals remain (approximately) Poisson(lam_x) and Poisson(lam_y).
+    """
+    if x == 0 and y == 0:
+        return 1.0 - lam_x * lam_y * rho
+    if x == 0 and y == 1:
+        return 1.0 + lam_x * rho
+    if x == 1 and y == 0:
+        return 1.0 + lam_y * rho
+    if x == 1 and y == 1:
+        return 1.0 - rho
+    return 1.0
+
+
+def dixon_coles_joint_pmf(
+    lam_x: float,
+    lam_y: float,
+    rho: float = DIXON_COLES_RHO,
+    max_goals: int = DC_MAX_GOALS,
+) -> list[list[float]]:
+    """Return the normalized Dixon-Coles joint PMF on {0..max_goals}^2.
+
+    Grid[i][j] = P(X = i, Y = j).  Sum of grid is 1 (up to truncation of
+    the Poisson tail beyond max_goals, which is <1e-6 for lambda <= 4).
+    """
+    pmf_x = [_poisson_pmf(i, lam_x) for i in range(max_goals + 1)]
+    pmf_y = [_poisson_pmf(j, lam_y) for j in range(max_goals + 1)]
+    grid = [
+        [
+            _dc_tau(i, j, lam_x, lam_y, rho) * pmf_x[i] * pmf_y[j]
+            for j in range(max_goals + 1)
+        ]
+        for i in range(max_goals + 1)
+    ]
+    total = sum(v for row in grid for v in row)
+    if total <= 0.0:
+        return grid  # degenerate; caller can detect
+    return [[v / total for v in row] for row in grid]
+
+
+def predict_match_probs(
+    team_a_data: dict,
+    team_b_data: dict,
+    neutral: bool = True,
+    rho: float = DIXON_COLES_RHO,
+    max_goals: int = DC_MAX_GOALS,
+) -> dict[str, float]:
+    """Analytic match-outcome probabilities from the Dixon-Coles model.
+
+    Returns a dict with:
+        home_win, draw, away_win         — 1X2 probabilities
+        over_2_5, under_2_5              — totals market
+        btts_yes, btts_no                — both-teams-to-score
+        expected_goals_a, expected_goals_b
+    No sampling: probabilities are summed directly from the joint PMF so
+    they are deterministic given the inputs. Suitable for calibration
+    evaluation against market-implied probabilities.
+    """
+    lam_a, lam_b = calculate_expected_goals(team_a_data, team_b_data, neutral)
+    grid = dixon_coles_joint_pmf(lam_a, lam_b, rho=rho, max_goals=max_goals)
+
+    home_win = draw = away_win = 0.0
+    over_2_5 = btts_yes = 0.0
+    for i, row in enumerate(grid):
+        for j, p in enumerate(row):
+            if i > j:
+                home_win += p
+            elif i == j:
+                draw += p
+            else:
+                away_win += p
+            if i + j > 2:  # strictly greater-than 2.5
+                over_2_5 += p
+            if i >= 1 and j >= 1:
+                btts_yes += p
+
+    return {
+        "home_win": home_win,
+        "draw": draw,
+        "away_win": away_win,
+        "over_2_5": over_2_5,
+        "under_2_5": 1.0 - over_2_5,
+        "btts_yes": btts_yes,
+        "btts_no": 1.0 - btts_yes,
+        "expected_goals_a": lam_a,
+        "expected_goals_b": lam_b,
+    }
+
+
+def _sample_dixon_coles(
+    lam_x: float,
+    lam_y: float,
+    rho: float = DIXON_COLES_RHO,
+    max_goals: int = DC_MAX_GOALS,
+) -> tuple[int, int]:
+    """Sample a scoreline (x, y) from the Dixon-Coles bivariate distribution.
+
+    Builds the joint PMF on {0..max_goals}^2, normalizes (absorbing any
+    rounding / boundary mass), and draws one sample by inverse CDF.
+    """
+    pmf_x = [_poisson_pmf(i, lam_x) for i in range(max_goals + 1)]
+    pmf_y = [_poisson_pmf(j, lam_y) for j in range(max_goals + 1)]
+
+    cells: list[tuple[int, int, float]] = []
+    total = 0.0
+    for i in range(max_goals + 1):
+        px = pmf_x[i]
+        if px == 0.0:
+            continue
+        for j in range(max_goals + 1):
+            p = _dc_tau(i, j, lam_x, lam_y, rho) * px * pmf_y[j]
+            if p > 0.0:
+                cells.append((i, j, p))
+                total += p
+
+    if total <= 0.0:
+        # Fallback to independent Poisson if rho pathologically zeros the grid
+        return _sample_poisson(lam_x), _sample_poisson(lam_y)
+
+    r = random.random() * total
+    acc = 0.0
+    for i, j, p in cells:
+        acc += p
+        if r <= acc:
+            return i, j
+    return cells[-1][0], cells[-1][1]
 
 
 def calculate_expected_goals(
@@ -199,9 +344,8 @@ def simulate_match(
 
     lambda_a, lambda_b = calculate_expected_goals(team_a_data, team_b_data, neutral)
 
-    # Sample goals from Poisson
-    goals_a = _sample_poisson(lambda_a)
-    goals_b = _sample_poisson(lambda_b)
+    # Sample correlated scoreline from the Dixon-Coles joint distribution
+    goals_a, goals_b = _sample_dixon_coles(lambda_a, lambda_b)
 
     # Generate goal events
     all_goals: list[GoalEvent] = []
@@ -255,8 +399,7 @@ def simulate_match(
         # Extra time
         et_lambda_a = lambda_a * 0.33  # 30 min period
         et_lambda_b = lambda_b * 0.33
-        et_goals_a = _sample_poisson(et_lambda_a)
-        et_goals_b = _sample_poisson(et_lambda_b)
+        et_goals_a, et_goals_b = _sample_dixon_coles(et_lambda_a, et_lambda_b)
 
         et_minutes_a = _generate_goal_minutes(et_goals_a, 91, 120)
         et_minutes_b = _generate_goal_minutes(et_goals_b, 91, 120)

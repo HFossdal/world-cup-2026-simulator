@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 .streamlit/
+
+# Backtest data + generated reports
+data_raw/
+reports/

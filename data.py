@@ -803,17 +803,19 @@ TEAMS: dict[str, dict] = {
 # ---------------------------------------------------------------------------
 # Group assignments  (official FIFA World Cup 2026 draw, Dec 5 2025)
 # ---------------------------------------------------------------------------
-# Playoff placeholders: ITA (UEFA PO A), POL (UEFA PO B), TUR (UEFA PO C),
-# DEN (UEFA PO D), COD (IC PO 1), IRQ (IC PO 2).
+# March 2026 playoff results are now final:
+#   UEFA Path A → BIH (upset Italy),  UEFA Path B → SWE,
+#   UEFA Path C → TUR,                UEFA Path D → CZE,
+#   Intercontinental 1 → COD,         Intercontinental 2 → IRQ.
 # ---------------------------------------------------------------------------
 
 GROUPS: dict[str, list[str]] = {
-    "A": ["MEX", "KOR", "RSA", "DEN"],
-    "B": ["CAN", "SUI", "QAT", "ITA"],
+    "A": ["MEX", "KOR", "RSA", "CZE"],
+    "B": ["CAN", "SUI", "QAT", "BIH"],
     "C": ["BRA", "MAR", "HAI", "SCO"],
     "D": ["USA", "PAR", "AUS", "TUR"],
     "E": ["GER", "CUR", "CIV", "ECU"],
-    "F": ["NED", "JPN", "POL", "TUN"],
+    "F": ["NED", "JPN", "SWE", "TUN"],
     "G": ["BEL", "EGY", "IRN", "NZL"],
     "H": ["ESP", "URU", "KSA", "CPV"],
     "I": ["FRA", "SEN", "NOR", "IRQ"],
@@ -1020,7 +1022,10 @@ def get_h2h(team_a: str, team_b: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Qualification status — 42 confirmed, 6 undecided (March 2026 playoffs)
+# Qualification status — 42 direct qualifiers + 6 playoff winners (final).
+# Playoff winners (March 2026): BIH, CZE, SWE, TUR, IRQ, COD.
+# They are resolved through PLAYOFF_SLOTS so users can run alternate-reality
+# what-ifs; the defaults reproduce the actual tournament field.
 # ---------------------------------------------------------------------------
 
 CONFIRMED_QUALIFIED: set[str] = {
@@ -1038,22 +1043,25 @@ CONFIRMED_QUALIFIED: set[str] = {
     "NZL",
 }
 
+# Playoff results are final. PLAYOFF_SLOTS is retained to let users
+# explore "what if the playoffs had gone differently" scenarios in the UI.
+# `most_likely` reflects the actual qualifier.
 PLAYOFF_SLOTS: list[dict] = [
     {
         "id": "slot_A3",
         "group": "A",
         "position": 3,
         "label": "UEFA Path D",
-        "candidates": ["DEN", "MKD", "CZE", "IRL"],
-        "most_likely": "DEN",
+        "candidates": ["CZE", "DEN", "MKD", "IRL"],
+        "most_likely": "CZE",
     },
     {
         "id": "slot_B3",
         "group": "B",
         "position": 3,
         "label": "UEFA Path A",
-        "candidates": ["ITA", "NIR", "WAL", "BIH"],
-        "most_likely": "ITA",
+        "candidates": ["BIH", "ITA", "NIR", "WAL"],
+        "most_likely": "BIH",
     },
     {
         "id": "slot_D3",
@@ -1068,8 +1076,8 @@ PLAYOFF_SLOTS: list[dict] = [
         "group": "F",
         "position": 1,  # 0-indexed position 1 = 2nd in group
         "label": "UEFA Path B",
-        "candidates": ["POL", "UKR", "SWE", "ALB"],
-        "most_likely": "POL",
+        "candidates": ["SWE", "POL", "UKR", "ALB"],
+        "most_likely": "SWE",
     },
     {
         "id": "slot_I3",
