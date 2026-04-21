@@ -1,12 +1,21 @@
 """
 Dixon-Coles (1997) maximum-likelihood fitter.
 
+SCOPE: this module exists to back the calibration backtest against club-league
+data (football-data.co.uk), where fixtures have a real home and away side and
+`gamma` captures genuine home-field advantage. It is NOT used by the World Cup
+simulator — every WC match is played at a neutral venue, so the simulator's
+match engine does not apply any home/away term. Do not wire this fitter into
+the WC path; it is strictly a tool for measuring out-of-sample calibration of
+the DC model against a sharp market (Pinnacle closing) on leagues where home
+advantage is a real, measurable effect.
+
 Given a training set of match rows (home, away, home_goals, away_goals, date),
 fits per-team attack/defense strengths, home advantage, baseline goal rate,
 and the low-score correlation parameter rho by L-BFGS-B on the joint
 log-likelihood of the DC bivariate distribution.
 
-Goal-rate parameterization (conventional DC):
+Goal-rate parameterization (conventional DC, club leagues only):
     lambda_home = exp(mu + atk_home - def_away + gamma)
     lambda_away = exp(mu + atk_away - def_home)
 

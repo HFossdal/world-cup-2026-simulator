@@ -173,11 +173,14 @@ A simpler keyword parser kicks in. It won’t understand everything, but it can 
 
 ## How the Simulation Works
 - **Match engine:** Dixon-Coles (1997) bivariate distribution — a Poisson model with a low-score correlation correction (parameter `rho`) that fixes the well-known under-prediction of 0-0, 1-1, 1-0 and 0-1 scorelines in football. The joint PMF is built over `{0..10}^2` and sampled by inverse CDF.
-- **Expected goals:** team attack / defense / midfield multipliers and a small "form" factor produce `(lambda_home, lambda_away)`; these feed the DC sampler (`simulation.simulate_match`) and the analytic probability function (`simulation.predict_match_probs`).
+- **Neutral venue, always.** Every World Cup match is played on neutral ground, so the simulator applies **no home-advantage term** — no `gamma`, no home/away asymmetry. Lambdas are a pure function of attack/defense + form.
+- **Expected goals:** team attack / defense / midfield multipliers and a small "form" factor produce `(lambda_a, lambda_b)`; these feed the DC sampler (`simulation.simulate_match`) and the analytic probability function (`simulation.predict_match_probs`).
 - **Group standings:** points → goal difference → goals for → FIFA ranking (final tie-breaker).
 - **48-team format:** 12 groups, top 2 qualify + **8 best third-place** teams.
 - **Knockouts:** no draws — extra time (Dixon-Coles-sampled) + penalties if still level.
 - **Head-to-head nudges** are layered on for a handful of classic matchups (see `data.HEAD_TO_HEAD`).
+
+Note: the calibration backtest in `scripts/backtest_report.py` *does* fit a `gamma` home-advantage term, because it runs on club-league data where home/away is a real effect. That `gamma` is scoped to the backtest only — the WC simulator never touches it.
 
 All logic lives in `simulation.py`; format/bracket slots and ratings in `data.py`.
 

@@ -182,14 +182,15 @@ def dixon_coles_joint_pmf(
 def predict_match_probs(
     team_a_data: dict,
     team_b_data: dict,
-    neutral: bool = True,
     rho: float = DIXON_COLES_RHO,
     max_goals: int = DC_MAX_GOALS,
 ) -> dict[str, float]:
     """Analytic match-outcome probabilities from the Dixon-Coles model.
 
     Returns a dict with:
-        home_win, draw, away_win         — 1X2 probabilities
+        home_win, draw, away_win         — 1X2 probabilities (labels
+                                           "home/away" are positional only;
+                                           every WC match is a neutral venue)
         over_2_5, under_2_5              — totals market
         btts_yes, btts_no                — both-teams-to-score
         expected_goals_a, expected_goals_b
@@ -197,7 +198,7 @@ def predict_match_probs(
     they are deterministic given the inputs. Suitable for calibration
     evaluation against market-implied probabilities.
     """
-    lam_a, lam_b = calculate_expected_goals(team_a_data, team_b_data, neutral)
+    lam_a, lam_b = calculate_expected_goals(team_a_data, team_b_data)
     grid = dixon_coles_joint_pmf(lam_a, lam_b, rho=rho, max_goals=max_goals)
 
     home_win = draw = away_win = 0.0
@@ -268,9 +269,14 @@ def _sample_dixon_coles(
 
 
 def calculate_expected_goals(
-    team_a: dict, team_b: dict, neutral: bool = True
+    team_a: dict, team_b: dict
 ) -> tuple[float, float]:
-    """Calculate expected goals for each team using the Poisson model."""
+    """Calculate expected goals for each team using the Poisson model.
+
+    All World Cup matches are played at neutral venues, so no home-advantage
+    term is applied — the lambdas are a pure function of attack/defense
+    strengths and form.
+    """
     att_a = team_a["attack"]
     def_a = team_a["defense"]
     att_b = team_b["attack"]
@@ -330,11 +336,10 @@ def _generate_goal_minutes(n_goals: int, start: int = 1, end: int = 90) -> list[
 def simulate_match(
     team_a_data: dict,
     team_b_data: dict,
-    neutral: bool = True,
     allow_draw: bool = True,
     generate_commentary: bool = False,
 ) -> MatchResult:
-    """Simulate a single match between two teams."""
+    """Simulate a single match between two teams (neutral venue)."""
     code_a = team_a_data["code"]
     code_b = team_b_data["code"]
     name_a = team_a_data["name"]
@@ -342,7 +347,7 @@ def simulate_match(
     flag_a = team_a_data["flag"]
     flag_b = team_b_data["flag"]
 
-    lambda_a, lambda_b = calculate_expected_goals(team_a_data, team_b_data, neutral)
+    lambda_a, lambda_b = calculate_expected_goals(team_a_data, team_b_data)
 
     # Sample correlated scoreline from the Dixon-Coles joint distribution
     goals_a, goals_b = _sample_dixon_coles(lambda_a, lambda_b)
@@ -586,7 +591,7 @@ def simulate_group_stage(
                         winner=code_a if sa > sb else (code_b if sb > sa else None),
                     )
                 else:
-                    result = simulate_match(team_a, team_b, neutral=True, allow_draw=True)
+                    result = simulate_match(team_a, team_b, allow_draw=True)
 
                 matches.append(result)
 
@@ -711,7 +716,7 @@ def _knockout_match(
         )
     return simulate_match(
         teams[code_a], teams[code_b],
-        neutral=True, allow_draw=False,
+        allow_draw=False,
         generate_commentary=generate_commentary,
     )
 
@@ -812,7 +817,7 @@ def simulate_knockout_stage(
     if len(sf_losers) == 2:
         third_place_match = simulate_match(
             teams[sf_losers[0]], teams[sf_losers[1]],
-            neutral=True, allow_draw=False,
+            allow_draw=False,
         )
 
     # --- Final ---
