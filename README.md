@@ -1,14 +1,15 @@
 # World Cup 2026 Simulator ⚽️
-**Probabilistic World Cup forecasting with a Dixon-Coles match engine, a calibration backtest against Pinnacle closing odds, and an AI scenario chat.**
+**Probabilistic World Cup forecasting with a Dixon-Coles match engine fit on real international match data, an out-of-sample calibration validation, and an AI scenario chat.**
 
-A Streamlit app + backtesting pipeline that:
+A Streamlit app + reproducible quant pipeline that:
 - simulates the full 48-team tournament (single run + bracket, or Monte Carlo),
 - models scorelines with the **Dixon-Coles bivariate distribution** (not independent Poisson),
-- ships a **calibration backtest** (`scripts/backtest_report.py`) that fits the DC model by MLE on historical football data and evaluates it on held-out matches using log loss, Brier, RPS, ECE, and fractional-Kelly PnL against sharp-market closing odds,
+- fits per-team attack/defense strengths by **MLE on ~4 000 real international matches** since the 2022 World Cup (`scripts/fit_international.py`, data from martj42/international_results, MIT-licensed),
+- validates the model **out-of-sample** on held-out international matches with log loss, Brier, RPS, ECE, and **paired-bootstrap CIs** vs uniform / base-rate baselines (`scripts/validate_international.py`),
 - exposes an AI scenario chat for "what-if" questions,
 - supports optional voice narration via ElevenLabs.
 
-> ⚠️ The tournament sim uses hand-curated international team ratings in `data.py` and is for exploration, not live betting. The calibration backtest is evaluated on club-league data (football-data.co.uk) where high-quality closing odds exist.
+> No market/odds data is used. International tournament closing odds are not freely redistributed in machine-readable form, so the project validates the model against **realised match outcomes** on the same data domain it predicts on, rather than against a market reference borrowed from an unrelated competition.
 
 ---
 
@@ -20,7 +21,7 @@ A Streamlit app + backtesting pipeline that:
 - [Scenario Examples](#scenario-examples)
 - [How Scenarios Work (Under the Hood)](#how-scenarios-work-under-the-hood)
 - [How the Simulation Works](#how-the-simulation-works)
-- [Calibration Backtest](#calibration-backtest)
+- [Calibration Validation](#calibration-validation)
 - [Project Structure](#project-structure)
 - [Customization](#customization)
 - [Troubleshooting](#troubleshooting)
@@ -72,15 +73,29 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2) Configure environment (optional, but recommended)
+### 2) Fit team ratings (one-time, ~10s)
+```bash
+python -m scripts.fit_international --years 4 --xi 0.0065
+# downloads ~4 000 international matches, fits Dixon-Coles by MLE,
+# writes team_ratings.json (gitignored). data.py loads it at import time.
+```
+If you skip this step the app still runs, but the simulator falls back to a small set of hand-typed strength multipliers in `data.py` instead of the MLE-fitted ratings.
+
+### 3) (Optional) Configure environment
 ```bash
 cp .env.example .env
-# then edit .env
+# then edit .env to add MISTRAL_API_KEY / ELEVENLABS_API_KEY if you want them
 ```
 
-### 3) Run
+### 4) Run
 ```bash
 streamlit run app.py
+```
+
+### 5) (Optional) Re-validate the model
+```bash
+python -m scripts.validate_international --years 4 --test-frac 0.20
+# writes reports/intl_metrics.md + reports/intl_reliability.png
 ```
 
 ---
@@ -173,53 +188,63 @@ A simpler keyword parser kicks in. It won’t understand everything, but it can 
 
 ## How the Simulation Works
 - **Match engine:** Dixon-Coles (1997) bivariate distribution — a Poisson model with a low-score correlation correction (parameter `rho`) that fixes the well-known under-prediction of 0-0, 1-1, 1-0 and 0-1 scorelines in football. The joint PMF is built over `{0..10}^2` and sampled by inverse CDF.
-- **Neutral venue, always.** Every World Cup match is played on neutral ground, so the simulator applies **no home-advantage term** — no `gamma`, no home/away asymmetry. Lambdas are a pure function of attack/defense + form.
-- **Expected goals:** team attack / defense / midfield multipliers and a small "form" factor produce `(lambda_a, lambda_b)`; these feed the DC sampler (`simulation.simulate_match`) and the analytic probability function (`simulation.predict_match_probs`).
+- **Neutral venue, always.** Every World Cup match is played on neutral ground, so the simulator applies **no home-advantage term** — no `gamma`, no home/away asymmetry.
+- **Team strength is fitted, not eyeballed.** `atk_dc` / `defn_dc` come from a Dixon-Coles MLE fit on **~4 000 real international matches** since the 2022 World Cup (martj42/international_results, MIT-licensed). The fitter uses Dixon-Coles exponential time-decay (`xi=0.0065`/day, half-life ~107 days) so recent form weighs more, and a per-match **neutral-venue flag** so the home-advantage `gamma` is estimated from qualifiers only and is then **discarded** at simulator time.
+- **Expected goals = the DC formula, directly.** The simulator computes `lambda_a = exp(mu + atk_a - defn_b)` and symmetrically for `lambda_b`, using the same fitted parameters that `validate_international.py` evaluates. No `AVG_GOALS_PER_TEAM` constant, no `1.40` normalisation, no separate form multiplier — all of which would double-count recency that is already in the time-decayed fit. The published calibration result therefore describes the actual simulator, not a drifted approximation.
+- **`form` field is computed for narrative use** (each team's average points-per-match over its last 10 international results, W=1/D=0.5/L=0), so AI commentary and UI labels can talk about "in form" / "out of form" — but it is **not** used in the lambda calculation when fitted ratings are loaded.
 - **Group standings:** points → goal difference → goals for → FIFA ranking (final tie-breaker).
 - **48-team format:** 12 groups, top 2 qualify + **8 best third-place** teams.
 - **Knockouts:** no draws — extra time (Dixon-Coles-sampled) + penalties if still level.
 - **Head-to-head nudges** are layered on for a handful of classic matchups (see `data.HEAD_TO_HEAD`).
 
-Note: the calibration backtest in `scripts/backtest_report.py` *does* fit a `gamma` home-advantage term, because it runs on club-league data where home/away is a real effect. That `gamma` is scoped to the backtest only — the WC simulator never touches it.
+Re-fitting the ratings (run after pulling new match data):
+```bash
+python -m scripts.fit_international --years 4 --xi 0.0065
+# writes team_ratings.json, which data.py loads at import time
+```
 
 All logic lives in `simulation.py`; format/bracket slots and ratings in `data.py`.
 
-## Calibration Backtest
+## Calibration Validation
 
-The file `scripts/backtest_report.py` is the quant-evaluation side of the project. It answers the question *"is this model's probability distribution actually calibrated, and would it make money against a sharp market?"* — the only questions that matter for a probabilistic forecaster.
+The file `scripts/validate_international.py` is the quant-evaluation side of the project. It answers the only question that matters for a probabilistic forecaster: *is this model's distribution over outcomes actually calibrated when judged on real, held-out international matches?*
 
 What it does:
-1. Downloads a free CSV from football-data.co.uk (Premier League, Bundesliga, etc.) with match results + Pinnacle closing odds.
-2. Splits chronologically into train / test.
-3. Fits the full Dixon-Coles model on the train split by **MLE** (L-BFGS-B) — per-team attack / defense, home advantage `gamma`, baseline rate `mu`, and `rho` — with optional Dixon-Coles exponential time-decay.
-4. Scores every test-set match with four forecasters:
+1. Pulls `martj42/international_results` (every men's senior international since 1872, MIT-licensed, redistributable).
+2. Slices the last `--years` of matches; chronological **train / test** split (no lookahead).
+3. Fits the full Dixon-Coles model on the train split by **MLE** (L-BFGS-B) — per-team attack / defense, home-advantage `gamma`, baseline rate `mu`, low-score correction `rho` — with **Dixon-Coles exponential time decay** (`xi=0.0065`/day) and a per-match **neutral-venue flag** so `gamma` is estimated from qualifiers and not contaminated by tournament fixtures.
+4. Predicts (P_home, P_draw, P_away) for every test match. Neutral test matches predict with `gamma=0`; non-neutral test matches predict with the fitted `gamma`.
+5. Scores three forecasters with **log loss, Brier, RPS, ECE**:
    - Uniform (1/3, 1/3, 1/3) — information-free baseline
-   - Home-advantage base rate (0.46, 0.27, 0.27)
-   - **Market** — Pinnacle closing odds after **Shin de-vigging** (sharp-market reference)
+   - Base rate from training-set frequencies — beating this requires actual predictive content
    - **Dixon-Coles MLE**
-5. Computes **log loss, Brier score, ranked probability score, expected calibration error**, runs a **fractional-Kelly backtest** against Pinnacle, and writes:
-   - `reports/metrics.md` — table + commentary
-   - `reports/reliability.png` — calibration diagram
-   - `reports/kelly_pnl.png` — bankroll curve
-   - `reports/metrics.json` — machine-readable
+6. Runs a **2 000-resample paired bootstrap** on per-match log-loss differences (DC vs each baseline) and reports a 95% CI on the gap. A CI that excludes zero means the gap is statistically meaningful, not noise.
+7. Writes:
+   - `reports/intl_metrics.md` — table + commentary
+   - `reports/intl_reliability.png` — calibration diagram
+   - `reports/intl_metrics.json` — machine-readable
 
 Run it:
 ```bash
-python scripts/backtest_report.py --league E0 --season 2324
-# optional: time-decayed likelihood (xi per day, Dixon-Coles used ~0.0065)
-python scripts/backtest_report.py --league D1 --season 2223 --xi 0.0065
+python -m scripts.validate_international --years 4 --test-frac 0.20 --xi 0.0065
 ```
 
-Sample output on the 2023-24 Premier League (114 held-out matches):
+Sample output on the last 4 years of international matches (3 234 train / 826 test, ~34% neutral venue):
 
-| Forecaster | Log loss ↓ | Brier ↓ | RPS ↓ |
-|---|---:|---:|---:|
-| Uniform | 1.099 | 0.667 | 0.235 |
-| Base-rate | 1.057 | 0.637 | 0.224 |
-| **Market (Pinnacle, Shin)** | **0.869** | **0.505** | **0.162** |
-| Dixon-Coles MLE | 0.937 | 0.554 | 0.183 |
+| Forecaster | Log loss ↓ | Brier ↓ | RPS ↓ | ECE ↓ |
+|---|---:|---:|---:|---:|
+| Uniform (1/3, 1/3, 1/3) | 1.099 | 0.667 | 0.239 | 0.000 |
+| Base rate (train frequencies) | 1.057 | 0.638 | 0.229 | 0.003 |
+| **Dixon-Coles MLE** | **0.868** | **0.516** | **0.170** | 0.016 |
 
-Dixon-Coles beats both naive baselines by a wide margin and lands ~8% short of Pinnacle in log loss. That is the honest result: a vanilla DC fit shouldn't beat the sharpest football market in the world. The Kelly backtest returns negative PnL, as expected when the model is less calibrated than the line — which is exactly what validates the test.
+| Comparison | Δ log-loss | 95% CI (paired bootstrap, 2 000 resamples) |
+|---|---:|---|
+| DC − Uniform | −0.230 | [−0.272, −0.188] **(significant)** |
+| DC − Base rate | −0.188 | [−0.227, −0.148] **(significant)** |
+
+Dixon-Coles cuts log-loss by **~21%** vs uniform and **~18%** vs the base rate, both with bootstrap CIs that exclude zero — i.e. the model has genuine, statistically distinguishable predictive content on real international matches, not just chance variation. ECE of 0.016 means the predicted probabilities are on average within 1.6 percentage points of empirical frequencies — well-calibrated by typical 1X2-forecasting standards.
+
+What this is *not*: a comparison to a sharp market. International tournament closing odds aren't freely redistributable, so there's no Pinnacle-equivalent reference here. Adding one (Euro 2024 / Copa America 2024 paid feeds) is the obvious next step.
 
 ---
 
@@ -231,12 +256,20 @@ mistral_agent.py            # Mistral scenario agent + JSON action parsing + fal
 simulation.py               # Dixon-Coles match engine, group/knockout sim, Monte Carlo,
                             #   predict_match_probs (analytic 1X2 / totals / BTTS)
 data.py                     # Teams/ratings/form/key players, groups, bracket, H2H
-backtest.py                 # De-vigging (proportional, Shin), log loss, Brier, RPS,
-                            #   ECE, reliability bins, Kelly backtest — pure functions
-dc_fit.py                   # MLE fitter for Dixon-Coles parameters (L-BFGS-B)
-scripts/backtest_report.py  # End-to-end: download → fit → evaluate → plot → report
-reports/                    # (gitignored) generated metrics.md, plots, JSON
-data_raw/                   # (gitignored) downloaded football-data.co.uk CSVs
+backtest.py                 # Scoring rules (log loss, Brier, RPS, ECE),
+                            #   reliability bins, paired bootstrap — pure functions
+dc_fit.py                   # MLE fitter for Dixon-Coles parameters (L-BFGS-B),
+                            #   with per-match neutral-venue handling
+scripts/fit_international.py# Fits team strengths on ~4yr of real international
+                            #   matches (martj42/international_results) and writes
+                            #   team_ratings.json, consumed by data.py at import time
+scripts/validate_international.py
+                            # Out-of-sample calibration: train/test split on
+                            #   international matches, scores DC vs baselines,
+                            #   paired-bootstrap CI on the gap, reliability plot
+team_ratings.json           # (gitignored) generated MLE-fit ratings + form
+reports/                    # (gitignored) generated intl_metrics.md, plots, JSON
+data_raw/                   # (gitignored) cached martj42 results CSV
 requirements.txt            # Python dependencies (incl. numpy, scipy, matplotlib)
 .env.example                # Environment template (keys)
 .gitignore                  # Ignores .env, caches, .streamlit/, reports/, data_raw/
@@ -280,12 +313,12 @@ In `app.py`, update:
 ---
 
 ## Roadmap Ideas
-- Multi-season MLE fit with Dixon-Coles time decay (`--xi 0.0065`), bootstrap CIs on the log-loss gap to market
-- Closing-line-value (CLV) analysis — did the model's picks move Pinnacle's line in the model's favour?
-- Repeat the backtest across D1 / I1 / SP1 / F1 to show the pipeline isn't overfit to one league
-- Derive attack/defense ratings for international teams from a historical-results Elo fit (bundled via `martj42/international_results`) to replace the hand-curated multipliers in `data.py`
-- Streamlit page that surfaces the calibration report in-app
-- Real-time match updates from live APIs; persist scenarios (export/import)
+- **Market-reference backtest on internationals.** Add Euro 2024 / Copa America 2024 closing odds from a paid feed and run de-vigging + Kelly + scoring rules vs the market. (No free equivalent of football-data.co.uk exists for international tournaments, so this requires either scraping or a paid data subscription.)
+- **Walk-forward validation.** Replace the single 80/20 split with rolling-origin evaluation: refit at each tournament window so the test set always reflects the deployment regime (recent international fixture density / opponent quality).
+- **Parametric bootstrap on attack/defense.** The fitted ratings are MLE point estimates. Resample matches and refit to get per-team CIs, then propagate that uncertainty into Monte Carlo win-probability bands.
+- **MC standard errors.** Tournament win probabilities are reported as point estimates; common-random-numbers and antithetic variates would tighten them, and the binomial SE on `n` simulations should be shown next to each percentage.
+- **Hierarchical / shrinkage prior on attack/defense.** Teams with very few internationals (e.g. New Caledonia) get noisy MLEs. A partial-pooling prior would stabilise them.
+- **Streamlit page** surfacing the calibration report, fit diagnostics, and per-team match-share counts in-app.
 
 ---
 

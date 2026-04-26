@@ -22,6 +22,7 @@ from data import (
     QF_FEEDS,
     SF_FEEDS,
     THIRD_PLACE_SLOTS,
+    RATINGS_META,
     assign_third_place_teams,
     get_h2h,
 )
@@ -271,32 +272,39 @@ def _sample_dixon_coles(
 def calculate_expected_goals(
     team_a: dict, team_b: dict
 ) -> tuple[float, float]:
-    """Calculate expected goals for each team using the Poisson model.
+    """Expected goals (lambda_a, lambda_b) for a neutral-venue match.
 
-    All World Cup matches are played at neutral venues, so no home-advantage
-    term is applied — the lambdas are a pure function of attack/defense
-    strengths and form.
+    When fitted DC ratings are loaded (team_ratings.json present), uses the
+    Dixon-Coles goal-rate formula directly:
+
+        lambda_a = exp(mu + atk_a - defn_b)
+        lambda_b = exp(mu + atk_b - defn_a)
+
+    No gamma, no form-factor multiplier, no AVG_GOALS_PER_TEAM constant —
+    the fitted ratings already encode strength and recency (xi=0.0065 time
+    decay), so layering a second adjustment would double-count.
+
+    When fitted ratings are NOT available (fresh clone, no team_ratings.json),
+    falls back to the legacy multiplicative formula on hand-typed ratings,
+    with the form factor providing the only recency adjustment.
     """
-    att_a = team_a["attack"]
-    def_a = team_a["defense"]
-    att_b = team_b["attack"]
-    def_b = team_b["defense"]
-    form_a = team_a.get("form", 0.5)
-    form_b = team_b.get("form", 0.5)
+    if RATINGS_META is not None and "atk_dc" in team_a and "atk_dc" in team_b:
+        mu = RATINGS_META["mu_dc"]
+        atk_a = team_a["atk_dc"]; atk_b = team_b["atk_dc"]
+        defn_a = team_a["defn_dc"]; defn_b = team_b["defn_dc"]
+        lambda_a = math.exp(mu + atk_a - defn_b)
+        lambda_b = math.exp(mu + atk_b - defn_a)
+        return max(0.05, lambda_a), max(0.05, lambda_b)
 
-    # Form adjustment (±15%)
+    # Legacy path: hand-typed multiplicative ratings + form factor
+    att_a = team_a["attack"]; def_a = team_a["defense"]
+    att_b = team_b["attack"]; def_b = team_b["defense"]
+    form_a = team_a.get("form", 0.5); form_b = team_b.get("form", 0.5)
     form_factor_a = 0.85 + 0.30 * form_a
     form_factor_b = 0.85 + 0.30 * form_b
-
-    # Expected goals
     lambda_a = AVG_GOALS_PER_TEAM * (att_a / 1.40) * (1.40 / def_b) * form_factor_a
     lambda_b = AVG_GOALS_PER_TEAM * (att_b / 1.40) * (1.40 / def_a) * form_factor_b
-
-    # Clamp to reasonable range
-    lambda_a = max(0.3, min(4.0, lambda_a))
-    lambda_b = max(0.3, min(4.0, lambda_b))
-
-    return lambda_a, lambda_b
+    return max(0.3, min(4.0, lambda_a)), max(0.3, min(4.0, lambda_b))
 
 
 def _pick_scorer(team: dict, exclude: list[str] | None = None) -> str:

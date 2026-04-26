@@ -7,3 +7,4 @@ __pycache__/
 # Backtest data + generated reports
 data_raw/
 reports/
+team_ratings.json

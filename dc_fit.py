@@ -1,30 +1,33 @@
 """
-Dixon-Coles (1997) maximum-likelihood fitter.
+Dixon-Coles (1997) maximum-likelihood fitter for international football.
 
-SCOPE: this module exists to back the calibration backtest against club-league
-data (football-data.co.uk), where fixtures have a real home and away side and
-`gamma` captures genuine home-field advantage. It is NOT used by the World Cup
-simulator — every WC match is played at a neutral venue, so the simulator's
-match engine does not apply any home/away term. Do not wire this fitter into
-the WC path; it is strictly a tool for measuring out-of-sample calibration of
-the DC model against a sharp market (Pinnacle closing) on leagues where home
-advantage is a real, measurable effect.
+Used by `scripts/fit_international.py` to derive the attack/defense ratings
+that drive the World Cup simulator, and by `scripts/validate_international.py`
+to fit a held-out training slice for out-of-sample calibration scoring.
 
-Given a training set of match rows (home, away, home_goals, away_goals, date),
-fits per-team attack/defense strengths, home advantage, baseline goal rate,
-and the low-score correlation parameter rho by L-BFGS-B on the joint
-log-likelihood of the DC bivariate distribution.
+Given a training set of match rows (home, away, home_goals, away_goals, date,
+neutral?), fits per-team attack/defense strengths, home-advantage gamma,
+baseline goal rate mu, and the low-score correlation parameter rho by
+L-BFGS-B on the joint log-likelihood of the DC bivariate distribution.
 
-Goal-rate parameterization (conventional DC, club leagues only):
-    lambda_home = exp(mu + atk_home - def_away + gamma)
+Goal-rate parameterisation:
+    lambda_home = exp(mu + atk_home - def_away + gamma * I[non-neutral])
     lambda_away = exp(mu + atk_away - def_home)
 
+For neutral-venue matches (tournaments, many friendlies on neutral ground)
+the gamma term is suppressed, so gamma is estimated from non-neutral fixtures
+only. The World Cup simulator runs every match with neutral=True, so gamma
+is never applied at predict time — but estimating it cleanly during the fit
+prevents it from leaking into the neutral-match attack/defense estimates.
+
 Identifiability is fixed by centering (atk) and (def) to zero mean after
-the optimizer returns.
+the optimizer returns; the shift is absorbed into mu so fitted lambdas are
+unchanged.
 
 Optional time-weighting follows Dixon-Coles:
     w(t) = exp(-xi * (t_ref - t)) in days,
-with t_ref = max date in the training set. Setting xi = 0 disables weighting.
+with t_ref = max date in the training set. Setting xi = 0 disables weighting;
+DC's recommended xi for football is ~0.0065/day (half-life ~107 days).
 """
 
 from __future__ import annotations
@@ -60,17 +63,22 @@ class DixonColesFit:
     converged: bool = True
     message: str = ""
 
-    def lambda_pair(self, home: str, away: str) -> tuple[float, float]:
-        """Return (lambda_home, lambda_away) for a match between the given teams."""
-        lam_h = math.exp(
-            self.baseline + self.atk[home] - self.defn[away] + self.home_advantage
-        )
+    def lambda_pair(self, home: str, away: str, neutral: bool = False) -> tuple[float, float]:
+        """Return (lambda_home, lambda_away). With neutral=True the home-side
+        gamma boost is omitted — use this for tournament/neutral matches."""
+        gamma = 0.0 if neutral else self.home_advantage
+        lam_h = math.exp(self.baseline + self.atk[home] - self.defn[away] + gamma)
         lam_a = math.exp(self.baseline + self.atk[away] - self.defn[home])
         return lam_h, lam_a
 
-    def probs(self, home: str, away: str, max_goals: int = 10) -> tuple[float, float, float]:
-        """(P_home, P_draw, P_away) from the fitted DC joint PMF."""
-        lam_h, lam_a = self.lambda_pair(home, away)
+    def probs(self, home: str, away: str, neutral: bool = False, max_goals: int = 10
+              ) -> tuple[float, float, float]:
+        """(P_home, P_draw, P_away) from the fitted DC joint PMF.
+
+        With neutral=True, gamma is zeroed — the right call for World-Cup-style
+        venues and any tournament held on neutral ground.
+        """
+        lam_h, lam_a = self.lambda_pair(home, away, neutral=neutral)
         return _dc_probs(lam_h, lam_a, self.rho, max_goals=max_goals)
 
 
@@ -137,11 +145,17 @@ def fit_dixon_coles(
     away_goals: Sequence[int],
     dates: Sequence[datetime] | None = None,
     xi: float = 0.0,
+    neutral: Sequence[bool] | None = None,
     verbose: bool = False,
 ) -> DixonColesFit:
     """Fit DC parameters by MLE. Returns a DixonColesFit.
 
-    xi = time-decay rate per day (Dixon & Coles used ~0.0065). 0 disables.
+    xi      = time-decay rate per day (Dixon & Coles used ~0.0065). 0 disables.
+    neutral = optional per-match flag. For neutral-venue matches the home-side
+              lambda is computed without the gamma term, so gamma estimates the
+              true home advantage on non-neutral matches only. This matters for
+              international football, where qualifiers are home/away but
+              tournaments and many friendlies are neutral.
     """
     home = list(home); away = list(away)
     hg = np.asarray(home_goals, dtype=int)
@@ -155,6 +169,14 @@ def fit_dixon_coles(
     T = len(teams)
     h_i = np.array([team_idx[t] for t in home])
     a_i = np.array([team_idx[t] for t in away])
+
+    # Per-match home-advantage indicator: 0 on neutral matches, 1 otherwise.
+    if neutral is None:
+        gamma_mask = np.ones(n)
+    else:
+        if len(neutral) != n:
+            raise ValueError("neutral must match the length of home/away")
+        gamma_mask = np.array([0.0 if bool(x) else 1.0 for x in neutral])
 
     # Time weights
     if xi > 0.0 and dates is not None:
@@ -173,7 +195,7 @@ def fit_dixon_coles(
 
     def neg_log_lik(params: np.ndarray) -> float:
         atk, defn, mu, gamma, rho = unpack(params)
-        lam_h = np.exp(mu + atk[h_i] - defn[a_i] + gamma)
+        lam_h = np.exp(mu + atk[h_i] - defn[a_i] + gamma * gamma_mask)
         lam_a = np.exp(mu + atk[a_i] - defn[h_i])
         # Poisson log-likelihood per match
         ll_poisson = (hg * np.log(lam_h) - lam_h
@@ -204,7 +226,7 @@ def fit_dixon_coles(
 
     result = minimize(
         neg_log_lik, x0, method="L-BFGS-B", bounds=bounds,
-        options={"maxiter": 500, "disp": verbose},
+        options={"maxiter": 5000, "maxfun": 50000, "disp": verbose},
     )
     atk, defn, mu, gamma, rho = unpack(result.x)
 
