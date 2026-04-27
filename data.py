@@ -12,6 +12,8 @@ clone, no internet) and as a starting point for hypothetical playoff
 alternates that the fitter doesn't have data for.
 """
 
+from __future__ import annotations
+
 import copy
 import json
 import os
