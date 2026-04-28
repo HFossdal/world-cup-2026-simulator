@@ -235,14 +235,14 @@ Sample output on the last 4 years of international matches (3 234 train / 826 te
 |---|---:|---:|---:|---:|
 | Uniform (1/3, 1/3, 1/3) | 1.099 | 0.667 | 0.239 | 0.000 |
 | Base rate (train frequencies) | 1.057 | 0.638 | 0.229 | 0.003 |
-| **Dixon-Coles MLE** | **0.868** | **0.516** | **0.170** | 0.016 |
+| **Dixon-Coles MLE** | **0.868** | **0.516** | **0.170** | 0.018 |
 
 | Comparison | Δ log-loss | 95% CI (paired bootstrap, 2 000 resamples) |
 |---|---:|---|
 | DC − Uniform | −0.230 | [−0.272, −0.188] **(significant)** |
 | DC − Base rate | −0.188 | [−0.227, −0.148] **(significant)** |
 
-Dixon-Coles cuts log-loss by **~21%** vs uniform and **~18%** vs the base rate, both with bootstrap CIs that exclude zero — i.e. the model has genuine, statistically distinguishable predictive content on real international matches, not just chance variation. ECE of 0.016 means the predicted probabilities are on average within 1.6 percentage points of empirical frequencies — well-calibrated by typical 1X2-forecasting standards.
+Dixon-Coles cuts log-loss by **~21%** vs uniform and **~18%** vs the base rate, both with bootstrap CIs that exclude zero — i.e. the model has genuine, statistically distinguishable predictive content on real international matches, not just chance variation. ECE of 0.018 means the predicted probabilities are on average within ~1.8 percentage points of empirical frequencies — well-calibrated by typical 1X2-forecasting standards.
 
 What this is *not*: a comparison to a sharp market. International tournament closing odds aren't freely redistributable, so there's no Pinnacle-equivalent reference here. Adding one (Euro 2024 / Copa America 2024 paid feeds) is the obvious next step.
 
