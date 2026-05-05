@@ -287,8 +287,9 @@ def inject_css():
 # ---------------------------------------------------------------------------
 
 def render_setup_screen():
-    """Render the tournament setup screen where users pick the 6 undecided
-    playoff slots. Returns (start_clicked, selections_dict) each call."""
+    """Render the tournament setup screen where users can swap any of the 6
+    playoff winners for alternate-reality what-ifs. Defaults to the actual
+    qualifiers. Returns (start_clicked, selections_dict) each call."""
     import random as _rand
 
     # ── Phase 1: Consume pending button flags BEFORE widgets render ──
@@ -309,7 +310,8 @@ def render_setup_screen():
     st.markdown(
         '<div class="setup-header">'
         "<h1>FIFA WORLD CUP 2026 DRAW</h1>"
-        "<p>42 teams confirmed &mdash; 6 playoff spots to be decided (March 2026)</p>"
+        "<p>All 48 teams qualified &mdash; swap any of the 6 playoff winners "
+        "to run alternate-reality what-ifs</p>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -347,9 +349,12 @@ def render_setup_screen():
                             f"{TEAMS[c]['name']}"
                             for c in candidates
                         ]
+                        actual_name = TEAMS[slot_info["most_likely"]]["name"]
                         st.markdown(
                             f'<div class="setup-slot-undecided">'
-                            f'Pos {pos_idx + 1} — {slot_info["label"]}</div>',
+                            f'Pos {pos_idx + 1} — {slot_info["label"]} '
+                            f'<span style="color:#cccccc;font-weight:400;">'
+                            f'(actual: {actual_name})</span></div>',
                             unsafe_allow_html=True,
                         )
                         chosen_idx = st.selectbox(
@@ -373,7 +378,7 @@ def render_setup_screen():
     # ── Phase 2: Action buttons set flags then rerun ──
     btn_cols = st.columns(3)
     with btn_cols[0]:
-        if st.button("Use Most Likely", use_container_width=True):
+        if st.button("Use Actual Qualifiers", use_container_width=True):
             st.session_state["_setup_use_likely"] = True
             st.rerun()
     with btn_cols[1]:
