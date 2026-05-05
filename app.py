@@ -239,14 +239,6 @@ with st.sidebar:
         teams = st.session_state.teams
         st.rerun()
 
-    if st.button("Change Lineup", use_container_width=True):
-        st.session_state.setup_complete = False
-        st.session_state.tournament_result = None
-        st.session_state.mc_data = None
-        st.session_state.chat_history = []
-        st.session_state.change_log = []
-        st.rerun()
-
     if st.session_state.change_log:
         st.markdown("### Active Modifications")
         for change in st.session_state.change_log[-10:]:
@@ -299,10 +291,13 @@ if not el_key or not ELEVENLABS_AVAILABLE:
 # Chat section
 # ---------------------------------------------------------------------------
 
-st.markdown("---")
-st.markdown("### 🤖 Scenario Chat")
-st.caption(
-    "Ask what-if questions, or click an example below to get started:"
+st.markdown(
+    '<div class="chat-section">'
+    '<div class="section-eyebrow">Scenario Chat</div>'
+    '<h2 class="section-title">Ask a what-if</h2>'
+    '<p class="section-sub">Type a scenario below, or pick one to start:</p>'
+    '</div>',
+    unsafe_allow_html=True,
 )
 
 # Example scenario chips

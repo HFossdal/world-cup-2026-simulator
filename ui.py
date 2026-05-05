@@ -216,31 +216,96 @@ div[data-testid="stExpander"] {
 }
 div[data-testid="stExpander"] summary { color: var(--text) !important; }
 
+/* ── Section header (Scenario Chat block) ────────────────────── */
+.chat-section {
+    margin: 2.4rem 0 0.6rem 0;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--border);
+}
+.chat-section .section-eyebrow {
+    color: var(--accent) !important;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-bottom: 0.35rem;
+}
+.chat-section .section-title {
+    color: var(--text) !important;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.25rem 0 !important;
+}
+.chat-section .section-sub {
+    color: var(--text-muted) !important;
+    font-size: 0.92rem;
+    margin: 0 0 0.9rem 0 !important;
+}
+
 /* ── Chat input ───────────────────────────────────────────────── */
+/* Streamlit pins the input to the bottom of the viewport — give it a
+   floating, framed look so it reads as an intentional control surface. */
+div[data-testid="stBottom"],
+div[data-testid="stBottom"] > div {
+    background-color: transparent !important;
+    background: linear-gradient(to top,
+        var(--bg) 0%,
+        var(--bg) 60%,
+        rgba(10,15,26,0) 100%) !important;
+    padding-top: 1.2rem !important;
+}
+div[data-testid="stChatInput"] {
+    max-width: 880px;
+    margin: 0 auto !important;
+}
 div[data-testid="stChatInput"] textarea {
     color: var(--text) !important;
     background-color: var(--panel) !important;
     border: 1px solid var(--border-strong) !important;
-    border-radius: 10px !important;
-    padding: 12px 16px !important;
+    border-radius: 14px !important;
+    padding: 16px 56px 16px 20px !important;
     font-size: 15px !important;
     font-family: 'Inter', sans-serif !important;
-    transition: border-color 120ms ease, box-shadow 120ms ease;
+    line-height: 1.5 !important;
+    box-shadow:
+        0 1px 0 rgba(255,255,255,0.03) inset,
+        0 8px 24px -12px rgba(0,0,0,0.5),
+        0 2px 6px -2px rgba(0,0,0,0.3) !important;
+    transition: border-color 140ms ease, box-shadow 140ms ease,
+                background-color 140ms ease !important;
 }
 div[data-testid="stChatInput"] textarea::placeholder {
     color: var(--text-faint) !important;
     opacity: 1 !important;
 }
+div[data-testid="stChatInput"] textarea:hover {
+    border-color: rgba(255,255,255,0.18) !important;
+    background-color: var(--panel-2) !important;
+}
 div[data-testid="stChatInput"] textarea:focus {
     border-color: var(--accent) !important;
-    box-shadow: 0 0 0 3px var(--accent-soft) !important;
+    background-color: var(--panel-2) !important;
+    box-shadow:
+        0 0 0 3px var(--accent-soft),
+        0 8px 32px -8px rgba(52,211,153,0.18),
+        0 1px 0 rgba(255,255,255,0.04) inset !important;
     outline: none !important;
 }
 div[data-testid="stChatInput"] > div { border-color: transparent !important; }
-div[data-testid="stBottom"],
-div[data-testid="stBottom"] > div {
-    background-color: var(--bg) !important;
+/* Send button (the small arrow inside the input) */
+div[data-testid="stChatInput"] button {
+    background-color: transparent !important;
+    border: none !important;
+    color: var(--text-muted) !important;
+    transition: color 120ms ease, background-color 120ms ease !important;
+    border-radius: 8px !important;
 }
+div[data-testid="stChatInput"] button:hover {
+    color: var(--accent) !important;
+    background-color: var(--accent-soft) !important;
+}
+div[data-testid="stChatInput"] button svg { fill: currentColor !important; }
 
 /* ── Setup screen ────────────────────────────────────────────── */
 .setup-header {
@@ -440,26 +505,27 @@ def render_header():
 # Scenario example chips
 # ---------------------------------------------------------------------------
 
-EXAMPLE_SCENARIOS: list[str] = [
-    "What if Norway wins all their group games?",
-    "Simulate 100 runs with Brazil weakened by 20%",
-    "What are France's chances if Mbappe is injured?",
-    "Run 1000 simulations and show me the top 10 winners",
-    "What if all the favorites lose in the Round of 16?",
+EXAMPLE_SCENARIOS: list[tuple[str, str]] = [
+    # (chip label, full prompt sent to the agent)
+    ("Norway runs the table",       "What if Norway wins all their group games?"),
+    ("Brazil −20% strength",        "Simulate 100 runs with Brazil weakened by 20%"),
+    ("Mbappé injured",              "What are France's chances if Mbappe is injured?"),
+    ("1000 sims, top 10 winners",   "Run 1000 simulations and show me the top 10 winners"),
+    ("Favorites crash in R16",      "What if all the favorites lose in the Round of 16?"),
 ]
 
 
 def render_scenario_chips() -> str | None:
-    """Render clickable example scenario pills. Returns the chosen prompt
-    text if a chip was clicked, or None."""
+    """Render clickable example scenario pills. Returns the full prompt
+    text of the clicked chip, or None."""
     clicked: str | None = None
     # Hidden marker div — CSS :has() selector uses this to target the
     # sibling columns container and style buttons as pills.
     st.markdown('<div class="chip-marker"></div>', unsafe_allow_html=True)
     cols = st.columns(len(EXAMPLE_SCENARIOS))
-    for i, (col, prompt) in enumerate(zip(cols, EXAMPLE_SCENARIOS)):
+    for i, (col, (label, prompt)) in enumerate(zip(cols, EXAMPLE_SCENARIOS)):
         with col:
-            if st.button(prompt, key=f"chip_{i}", use_container_width=True):
+            if st.button(label, key=f"chip_{i}", use_container_width=True):
                 clicked = prompt
     return clicked
 
