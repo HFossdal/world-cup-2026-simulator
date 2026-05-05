@@ -54,225 +54,319 @@ def flag_img(code: str, size: int = 20) -> str:
 
 CUSTOM_CSS = """
 <style>
-/* ── Base dark-green theme ────────────────────────────────────── */
-.stApp {
-    background-color: #0d1f0d !important;
-    color: #ffffff !important;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Design tokens ────────────────────────────────────────────── */
+:root {
+    --bg:           #0a0f1a;
+    --panel:        #111827;
+    --panel-2:      #161f33;
+    --panel-hover:  #1c2740;
+    --border:       rgba(255,255,255,0.06);
+    --border-strong:rgba(255,255,255,0.12);
+    --text:         #e6e8ec;
+    --text-muted:   #9aa3b2;
+    --text-faint:   #6b7383;
+    --accent:       #34d399;   /* emerald — primary */
+    --accent-soft:  rgba(52,211,153,0.12);
+    --gold:         #f5c451;   /* sparing — trophy/highlight only */
 }
 
-/* Force white text everywhere */
+/* ── Base ─────────────────────────────────────────────────────── */
+.stApp {
+    background: radial-gradient(ellipse 80% 50% at 50% -10%,
+                rgba(52,211,153,0.05), transparent 70%), var(--bg) !important;
+    color: var(--text) !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-feature-settings: "cv11", "ss01", "ss03";
+}
 .stApp, .stApp p, .stApp span, .stApp li, .stApp label,
 .stApp div, .stApp td, .stApp th,
 div[data-testid="stMarkdownContainer"] p,
 div[data-testid="stMarkdownContainer"] li,
 div[data-testid="stMarkdownContainer"] span {
-    color: #ffffff !important;
+    color: var(--text) !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
-/* Gold headings */
+/* Headings: off-white, tighter tracking, no gold */
 .stApp h1, .stApp h2, .stApp h3, .stApp h4 {
-    color: #FFD700 !important;
+    color: var(--text) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em !important;
+}
+.stApp h1 { font-weight: 800 !important; letter-spacing: -0.02em !important; }
+
+.stApp .secondary, .stCaption, small,
+div[data-testid="stCaptionContainer"] {
+    color: var(--text-muted) !important;
 }
 
-/* Secondary / muted text */
-.stApp .secondary, .stCaption, small {
-    color: #cccccc !important;
+/* Numeric / monospace contexts */
+.mono, code, pre, kbd, samp {
+    font-family: 'JetBrains Mono', ui-monospace, monospace !important;
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
 .sim-header {
     text-align: center;
-    padding: 1.2rem 0 0.6rem 0;
+    padding: 1.4rem 0 0.4rem 0;
 }
 .sim-header h1 {
-    color: #FFD700 !important;
-    font-size: 2.6rem;
+    color: var(--text) !important;
+    font-size: 2.4rem;
     font-weight: 800;
-    letter-spacing: 2px;
+    letter-spacing: -0.025em;
     margin-bottom: 0;
 }
+.sim-header h1 .accent {
+    background: linear-gradient(135deg, var(--accent), #60d394);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
 .sim-header p {
-    color: #cccccc !important;
-    font-size: 1rem;
-    margin-top: 0.2rem;
+    color: var(--text-muted) !important;
+    font-size: 0.95rem;
+    margin-top: 0.3rem;
 }
 
 /* ── Chat messages ────────────────────────────────────────────── */
 div[data-testid="stChatMessage"] {
-    background: #132613 !important;
-    border: 1px solid #2d5a2d !important;
-    border-radius: 8px !important;
+    background: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    padding: 0.85rem 1rem !important;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset;
 }
 
 /* ── Buttons ──────────────────────────────────────────────────── */
 .stButton > button {
-    background-color: #1a3a1a !important;
-    color: #FFD700 !important;
-    border: 1px solid #FFD700 !important;
+    background-color: var(--panel-2) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    transition: background-color 120ms ease, border-color 120ms ease,
+                transform 80ms ease !important;
 }
 .stButton > button:hover {
-    background-color: #2d5a2d !important;
+    background-color: var(--panel-hover) !important;
+    border-color: var(--accent) !important;
+}
+.stButton > button:active { transform: translateY(1px); }
+
+/* Primary button (type="primary") */
+.stButton > button[kind="primary"] {
+    background: var(--accent) !important;
+    color: #06281d !important;
+    border: 1px solid var(--accent) !important;
+    font-weight: 600 !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: #4ade80 !important;
+    border-color: #4ade80 !important;
 }
 
 /* ── Group table header ───────────────────────────────────────── */
 .group-header {
-    color: #FFD700 !important;
-    font-size: 1.2rem;
-    font-weight: 700;
-    border-bottom: 2px solid #2d5a2d;
-    padding-bottom: 0.3rem;
-    margin-bottom: 0.5rem;
+    color: var(--text) !important;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid var(--border-strong);
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.6rem;
 }
 
 /* ── Metrics ──────────────────────────────────────────────────── */
 div[data-testid="stMetricValue"] {
-    color: #FFD700 !important;
+    color: var(--text) !important;
+    font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+    font-weight: 600 !important;
 }
 div[data-testid="stMetricLabel"] {
-    color: #cccccc !important;
+    color: var(--text-muted) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.72rem !important;
 }
 
 /* ── Sidebar ──────────────────────────────────────────────────── */
 section[data-testid="stSidebar"] {
-    background-color: #0a180a !important;
+    background-color: #070b14 !important;
+    border-right: 1px solid var(--border) !important;
 }
 section[data-testid="stSidebar"] .stMarkdown p,
 section[data-testid="stSidebar"] .stMarkdown span,
 section[data-testid="stSidebar"] .stMarkdown li,
 section[data-testid="stSidebar"] label {
-    color: #ffffff !important;
+    color: var(--text) !important;
 }
 
-/* ── Dataframe overrides ──────────────────────────────────────── */
-.stDataFrame {
-    background-color: #0d1f0d !important;
+/* ── Dataframe ────────────────────────────────────────────────── */
+.stDataFrame { background-color: var(--panel) !important; }
+
+/* ── Expander ─────────────────────────────────────────────────── */
+div[data-testid="stExpander"] {
+    background: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
 }
+div[data-testid="stExpander"] summary { color: var(--text) !important; }
 
 /* ── Chat input ───────────────────────────────────────────────── */
-div[data-testid="stChatInput"] {
-    border-color: #4CAF50 !important;
-}
 div[data-testid="stChatInput"] textarea {
-    color: #ffffff !important;
-    background-color: #1a2e1a !important;
-    border: 2px solid #4CAF50 !important;
-    border-radius: 8px !important;
+    color: var(--text) !important;
+    background-color: var(--panel) !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: 10px !important;
     padding: 12px 16px !important;
-    font-size: 16px !important;
+    font-size: 15px !important;
+    font-family: 'Inter', sans-serif !important;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 div[data-testid="stChatInput"] textarea::placeholder {
-    color: #888888 !important;
+    color: var(--text-faint) !important;
     opacity: 1 !important;
 }
 div[data-testid="stChatInput"] textarea:focus {
-    border-color: #FFD700 !important;
-    box-shadow: 0 0 8px rgba(255,215,0,0.3) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-soft) !important;
     outline: none !important;
 }
-/* Streamlit wraps chat input in a container with bottom border */
-div[data-testid="stChatInput"] > div {
-    border-color: #4CAF50 !important;
-}
-div[data-testid="stBottom"] {
-    background-color: #0d1f0d !important;
-}
+div[data-testid="stChatInput"] > div { border-color: transparent !important; }
+div[data-testid="stBottom"],
 div[data-testid="stBottom"] > div {
-    background-color: #0d1f0d !important;
+    background-color: var(--bg) !important;
 }
 
 /* ── Setup screen ────────────────────────────────────────────── */
 .setup-header {
     text-align: center;
-    padding: 1.5rem 0 1rem 0;
+    padding: 2rem 0 1.2rem 0;
 }
 .setup-header h1 {
-    color: #FFD700 !important;
-    font-size: 2.4rem;
+    color: var(--text) !important;
+    font-size: 2.2rem;
     font-weight: 800;
-    letter-spacing: 2px;
-    margin-bottom: 0.2rem;
+    letter-spacing: -0.025em;
+    margin-bottom: 0.4rem;
 }
 .setup-header p {
-    color: #cccccc !important;
-    font-size: 1rem;
+    color: var(--text-muted) !important;
+    font-size: 0.95rem;
+    max-width: 620px;
+    margin: 0 auto;
+    line-height: 1.5;
 }
 .setup-team-confirmed {
-    background: #132613;
-    border-left: 3px solid #4CAF50;
-    padding: 4px 10px;
-    margin: 2px 0;
-    border-radius: 0 4px 4px 0;
-    color: #ffffff;
-    font-size: 0.9rem;
-}
-.setup-slot-undecided {
-    background: #1a2e1a;
-    border: 1px dashed #FFD700;
-    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--accent);
+    padding: 7px 12px;
     margin: 4px 0;
-    border-radius: 4px;
-    color: #FFD700;
-    font-size: 0.9rem;
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.88rem;
+    transition: background-color 120ms ease;
+}
+.setup-team-confirmed:hover { background: var(--panel-2); }
+.setup-slot-undecided {
+    background: var(--panel-2);
+    border: 1px solid rgba(245,196,81,0.3);
+    border-left: 2px solid var(--gold);
+    padding: 7px 12px;
+    margin: 4px 0;
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 500;
 }
 
-/* ── Dropdown option list (open menu) ────────────────────────── */
-div[data-baseweb="select"] ul li {
-    color: #1a1a1a !important;
-    background-color: #ffffff !important;
-}
-div[data-baseweb="select"] ul li:hover {
-    background-color: #e8f5e9 !important;
-}
-div[data-baseweb="select"] ul {
-    background-color: #ffffff !important;
-}
-/* ── Dropdown selected value (closed selectbox) ──────────────── */
-/* Must beat ".stApp div { color: #ffffff !important }" (specificity
-   0-1-1).  Using .stApp prefix + attribute selector gives 0-2-1,
-   which wins. */
+/* ── Selectbox (BaseWeb) ──────────────────────────────────────── */
 .stApp div[data-baseweb="select"] > div {
-    background-color: #f0f2f0 !important;
-    border-color: #4CAF50 !important;
+    background-color: var(--panel) !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: 6px !important;
 }
-.stApp div[data-baseweb="select"] > div > div {
-    color: #1a1a1a !important;
+.stApp div[data-baseweb="select"] > div:hover {
+    border-color: var(--accent) !important;
 }
-.stApp div[data-baseweb="select"] > div > div > div {
-    color: #1a1a1a !important;
-}
+.stApp div[data-baseweb="select"] > div > div,
+.stApp div[data-baseweb="select"] > div > div > div,
 .stApp div[data-baseweb="select"] span {
-    color: #1a1a1a !important;
+    color: var(--text) !important;
 }
 .stApp div[data-baseweb="select"] input {
-    color: #1a1a1a !important;
-    -webkit-text-fill-color: #1a1a1a !important;
+    color: var(--text) !important;
+    -webkit-text-fill-color: var(--text) !important;
 }
-.stApp div[data-baseweb="select"] svg {
-    fill: #555555 !important;
+.stApp div[data-baseweb="select"] svg { fill: var(--text-muted) !important; }
+
+/* Open dropdown menu — keep dark to match the rest of the app */
+div[data-baseweb="popover"] ul,
+div[data-baseweb="select"] ul {
+    background-color: var(--panel) !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: 6px !important;
+}
+div[data-baseweb="popover"] ul li,
+div[data-baseweb="select"] ul li {
+    color: var(--text) !important;
+    background-color: var(--panel) !important;
+}
+div[data-baseweb="popover"] ul li:hover,
+div[data-baseweb="select"] ul li:hover {
+    background-color: var(--panel-hover) !important;
+    color: var(--accent) !important;
 }
 
-/* ── Scenario chips (pill-shaped buttons) ────────────────────── */
-/* Marker-based targeting: a hidden .chip-marker div sits in one
-   Streamlit element container; the columns with buttons are in the
-   next sibling container.  :has() lets us reach across. */
+/* ── Scenario chips ──────────────────────────────────────────── */
 div:has(> div > .chip-marker) + div .stButton > button {
-    background: #2d4a2d !important;
-    color: #FFD700 !important;
-    border: 1px solid #3d6a3d !important;
-    border-radius: 20px !important;
-    padding: 4px 14px !important;
-    font-size: 0.82rem !important;
+    background: transparent !important;
+    color: var(--text-muted) !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: 999px !important;
+    padding: 5px 14px !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
     white-space: nowrap !important;
     min-height: 0 !important;
     height: auto !important;
     line-height: 1.4 !important;
+    transition: all 120ms ease !important;
 }
 div:has(> div > .chip-marker) + div .stButton > button:hover {
-    background: #FFD700 !important;
-    color: #0d1f0d !important;
-    border-color: #FFD700 !important;
+    background: var(--accent-soft) !important;
+    color: var(--accent) !important;
+    border-color: var(--accent) !important;
 }
 .chip-marker { display: none; }
+
+/* ── Status alerts (success/warning/info) ─────────────────────── */
+div[data-testid="stAlert"] {
+    background: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+}
+
+/* ── Slider track ─────────────────────────────────────────────── */
+div[data-baseweb="slider"] [role="slider"] {
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+    background: var(--panel-2);
+    border-radius: 5px;
+    border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--panel-hover); }
 </style>
 """
 
@@ -353,7 +447,7 @@ def render_setup_screen():
                         st.markdown(
                             f'<div class="setup-slot-undecided">'
                             f'Pos {pos_idx + 1} — {slot_info["label"]} '
-                            f'<span style="color:#cccccc;font-weight:400;">'
+                            f'<span style="color:var(--text-muted);font-weight:400;">'
                             f'(actual: {actual_name})</span></div>',
                             unsafe_allow_html=True,
                         )
@@ -408,8 +502,8 @@ def render_header():
     st.markdown(
         """
         <div class="sim-header">
-            <h1>⚽ WORLD CUP 2026 SIMULATOR</h1>
-            <p>Powered by Mistral AI &amp; ElevenLabs</p>
+            <h1>World Cup <span class="accent">2026</span> Simulator</h1>
+            <p>Dixon-Coles match model · Mistral scenario chat · ElevenLabs commentary</p>
         </div>
         """,
         unsafe_allow_html=True,
