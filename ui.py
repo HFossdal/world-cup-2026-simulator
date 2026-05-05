@@ -273,17 +273,6 @@ div[data-testid="stBottom"] > div {
     transition: background-color 120ms ease;
 }
 .setup-team-confirmed:hover { background: var(--panel-2); }
-.setup-slot-undecided {
-    background: var(--panel-2);
-    border: 1px solid rgba(245,196,81,0.3);
-    border-left: 2px solid var(--gold);
-    padding: 7px 12px;
-    margin: 4px 0;
-    border-radius: 6px;
-    color: var(--text);
-    font-size: 0.88rem;
-    font-weight: 500;
-}
 
 /* ── Selectbox (BaseWeb) ──────────────────────────────────────── */
 .stApp div[data-baseweb="select"] > div {
@@ -381,46 +370,18 @@ def inject_css():
 # ---------------------------------------------------------------------------
 
 def render_setup_screen():
-    """Render the tournament setup screen where users can swap any of the 6
-    playoff winners for alternate-reality what-ifs. Defaults to the actual
-    qualifiers. Returns (start_clicked, selections_dict) each call."""
-    import random as _rand
-
-    # ── Phase 1: Consume pending button flags BEFORE widgets render ──
-    # This avoids the Streamlit error of modifying widget-bound session
-    # state after the widget has already been created.
-    if st.session_state.get("_setup_use_likely"):
-        for slot in PLAYOFF_SLOTS:
-            st.session_state[f"setup_{slot['id']}"] = 0  # first = most likely
-        st.session_state["_setup_use_likely"] = False
-
-    if st.session_state.get("_setup_randomize"):
-        for slot in PLAYOFF_SLOTS:
-            idx = _rand.randrange(len(slot["candidates"]))
-            st.session_state[f"setup_{slot['id']}"] = idx
-        st.session_state["_setup_randomize"] = False
+    """Render the tournament setup screen showing all 48 confirmed qualifiers.
+    Returns (start_clicked, selections_dict) each call. selections_dict always
+    resolves to the actual qualifiers (PLAYOFF_SLOTS defaults)."""
 
     # ── Header ──
     st.markdown(
         '<div class="setup-header">'
-        "<h1>FIFA WORLD CUP 2026 DRAW</h1>"
-        "<p>All 48 teams qualified &mdash; swap any of the 6 playoff winners "
-        "to run alternate-reality what-ifs</p>"
+        "<h1>FIFA World Cup 2026</h1>"
+        "<p>All 48 qualifiers confirmed &mdash; the official group-stage draw</p>"
         "</div>",
         unsafe_allow_html=True,
     )
-
-    # Build a lookup: group → {pos_idx: slot_info}
-    slot_pos_map: dict[str, dict[int, dict]] = {}
-    _pos_lookup = {
-        "slot_A3": ("A", 3), "slot_B3": ("B", 3), "slot_D3": ("D", 3),
-        "slot_F2": ("F", 2), "slot_I3": ("I", 3), "slot_K3": ("K", 3),
-    }
-    for slot in PLAYOFF_SLOTS:
-        grp, pos = _pos_lookup[slot["id"]]
-        slot_pos_map.setdefault(grp, {})[pos] = slot
-
-    selections: dict[str, str] = {}
 
     # ── Display 12 groups in a 3-column grid ──
     group_letters = list(GROUPS.keys())
@@ -435,57 +396,22 @@ def render_setup_screen():
             with col:
                 st.markdown(f'<div class="group-header">Group {letter}</div>',
                             unsafe_allow_html=True)
-                for pos_idx, code in enumerate(team_codes):
-                    slot_info = slot_pos_map.get(letter, {}).get(pos_idx)
-                    if slot_info:
-                        candidates = slot_info["candidates"]
-                        candidate_labels = [
-                            f"{TEAMS[c]['name']}"
-                            for c in candidates
-                        ]
-                        actual_name = TEAMS[slot_info["most_likely"]]["name"]
-                        st.markdown(
-                            f'<div class="setup-slot-undecided">'
-                            f'Pos {pos_idx + 1} — {slot_info["label"]} '
-                            f'<span style="color:var(--text-muted);font-weight:400;">'
-                            f'(actual: {actual_name})</span></div>',
-                            unsafe_allow_html=True,
-                        )
-                        chosen_idx = st.selectbox(
-                            f"Pick team for {slot_info['label']}",
-                            range(len(candidates)),
-                            format_func=lambda i, cl=candidate_labels: cl[i],
-                            key=f"setup_{slot_info['id']}",
-                            label_visibility="collapsed",
-                        )
-                        selections[slot_info["id"]] = candidates[chosen_idx]
-                    else:
-                        t = TEAMS.get(code, {})
-                        st.markdown(
-                            f'<div class="setup-team-confirmed">'
-                            f'{flag_img(code)} {t.get("name", code)}</div>',
-                            unsafe_allow_html=True,
-                        )
+                for code in team_codes:
+                    t = TEAMS.get(code, {})
+                    st.markdown(
+                        f'<div class="setup-team-confirmed">'
+                        f'{flag_img(code)} {t.get("name", code)}</div>',
+                        unsafe_allow_html=True,
+                    )
 
     st.markdown("---")
 
-    # ── Phase 2: Action buttons set flags then rerun ──
-    btn_cols = st.columns(3)
-    with btn_cols[0]:
-        if st.button("Use Actual Qualifiers", use_container_width=True):
-            st.session_state["_setup_use_likely"] = True
-            st.rerun()
-    with btn_cols[1]:
-        if st.button("Randomize", use_container_width=True):
-            st.session_state["_setup_randomize"] = True
-            st.rerun()
+    # ── Defaults always reproduce the actual 48-team field ──
+    selections = {slot["id"]: slot["most_likely"] for slot in PLAYOFF_SLOTS}
 
-    # Ensure all slots have a selection
-    for slot in PLAYOFF_SLOTS:
-        if slot["id"] not in selections:
-            selections[slot["id"]] = slot["most_likely"]
-
-    with btn_cols[2]:
+    # ── Single Start button, centred ──
+    _, btn_col, _ = st.columns([1, 2, 1])
+    with btn_col:
         start_clicked = st.button(
             "Start Simulating", use_container_width=True, type="primary"
         )

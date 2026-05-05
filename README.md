@@ -1,5 +1,6 @@
-# World Cup 2026 Simulator ⚽️
-**Probabilistic World Cup forecasting with a Dixon-Coles match engine fit on real international match data, an out-of-sample calibration validation, and an AI scenario chat.**
+# World Cup 2026 Simulator
+
+Probabilistic World Cup forecasting with a Dixon-Coles match engine fit on real international match data, out-of-sample calibration validation, and an AI scenario chat.
 
 A Streamlit app + reproducible quant pipeline that:
 - simulates the full 48-team tournament (single run + bracket, or Monte Carlo),
@@ -13,47 +14,39 @@ A Streamlit app + reproducible quant pipeline that:
 
 ---
 
-## Table of Contents
+## Contents
 - [Features](#features)
 - [Quickstart](#quickstart)
-- [API Keys (Optional)](#api-keys-optional)
-- [How to Use](#how-to-use)
-- [Scenario Examples](#scenario-examples)
-- [How Scenarios Work (Under the Hood)](#how-scenarios-work-under-the-hood)
-- [How the Simulation Works](#how-the-simulation-works)
-- [Calibration Validation](#calibration-validation)
-- [Project Structure](#project-structure)
+- [API keys (optional)](#api-keys-optional)
+- [How to use](#how-to-use)
+- [Scenario examples](#scenario-examples)
+- [How scenarios work (under the hood)](#how-scenarios-work-under-the-hood)
+- [How the simulation works](#how-the-simulation-works)
+- [Calibration validation](#calibration-validation)
+- [Project structure](#project-structure)
 - [Customization](#customization)
 - [Troubleshooting](#troubleshooting)
-- [Roadmap Ideas](#roadmap-ideas)
+- [Roadmap](#roadmap)
 - [Author](#author)
 
 ---
 
 ## Features
 
-### 🧩 Interactive Setup
-- All 48 qualifiers are final as of April 2026. Defaults reproduce the actual field (including Bosnia's upset of Italy, Sweden over Poland, Czech Republic over Denmark in the UEFA playoffs).
-- The 6 playoff slots remain editable so you can run **alternate-reality what-ifs** — e.g. "what if Italy had qualified instead of Bosnia?"
+### Confirmed field
+All 48 qualifiers are final (resolved March 2026). The setup screen displays the official group-stage draw — Bosnia, Sweden, Turkey, Czech Republic, DR Congo, and Iraq took the six playoff spots.
 
-### 🤖 Scenario Chat (AI + fallback)
-- If you set `MISTRAL_API_KEY`, Mistral interprets your prompt and applies structured modifications automatically.
-- If you **don’t** set the key, the app still runs with a **basic keyword fallback parser** (useful for simple injuries/boosts/sim requests).
+### Scenario chat
+With `MISTRAL_API_KEY` set, Mistral parses prompts into structured modifications (rating adjustments, locked scorelines, forced eliminations) and applies them before simulating. Without the key, a keyword fallback handles basic injury / boost / simulate requests so the app stays functional.
 
-### 🏆 Single Tournament Run + Bracket
-- Simulate the full 48-team tournament (groups → Round of 32 → final).
-- View a clean SVG bracket and group tables.
+### Single-run bracket
+Full 48-team tournament (groups → Round of 32 → final) rendered as an SVG bracket with group tables.
 
-### 📊 Monte Carlo Mode
-- Run **100 / 500 / 1000 / 5000** tournament simulations.
-- See:
-  - win % (top chart),
-  - stage probabilities (Group Exit → Winner),
-  - “Most likely final” matchup.
+### Monte Carlo
+100 / 500 / 1000 / 5000 runs. Reports per-team win probability, stage probabilities (Group Exit → Winner), and the modal final matchup.
 
-### 🔊 Optional Voice Narration (ElevenLabs)
-- If `ELEVENLABS_API_KEY` is set, results can be narrated via TTS.
-- Includes a mute toggle in the UI.
+### Voice narration (optional)
+With `ELEVENLABS_API_KEY` set, post-simulation commentary is narrated via TTS. Mute toggle in the header.
 
 ---
 
@@ -100,8 +93,8 @@ python -m scripts.validate_international --years 4 --test-frac 0.20
 
 ---
 
-## API Keys (Optional)
-You can run the app **without** any API keys.
+## API keys (optional)
+You can run the app without any API keys.
 
 | Variable | Required? | What it enables |
 |---|---:|---|
@@ -120,45 +113,29 @@ ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 
 ---
 
-## How to Use
+## How to use
 
-### 1) Setup screen (first time)
-- Fill the **6 undecided slots** via dropdowns.
-- Click **Start Simulating**.
-
-### 2) Simulate from the sidebar
-- **🏆 Simulate Tournament** → one full tournament + bracket
-- **📊 Run N Simulations** → Monte Carlo probabilities
-
-### 3) Use Scenario Chat
-Type what-if prompts in the chat (or click an example chip).  
-Your scenario can:
-- adjust team strength,
-- lock match results,
-- force winners / force eliminations in specific knockout rounds,
-- run a simulation immediately,
-- reset back to baseline.
-
-### 4) Reset / Change lineup
-- **🔄 Reset All Modifications** clears scenario changes, locked results, and constraints.
-- **Change Lineup** returns to the setup screen.
+1. **Setup screen.** Shows the confirmed 48-team field grouped A–L. Click **Start Simulating** to enter the simulator.
+2. **Simulate from the sidebar.** *Simulate Tournament* runs one full tournament with bracket; *Run N Simulations* runs Monte Carlo and reports probabilities.
+3. **Scenario chat.** Type a what-if prompt or click an example chip. A scenario can adjust team strength, lock match results, force winners or eliminations in specific knockout rounds, kick off a simulation, or reset to baseline.
+4. **Reset / Change Lineup.** *Reset All Modifications* clears scenario changes; *Change Lineup* returns to the setup screen.
 
 ---
 
-## Scenario Examples
-Try these:
-- “What if Norway wins all their group games?”
-- “Simulate 1000 runs and show the top 10 winners.”
-- “France loses Mbappé to injury.”
-- “Brazil gets weakened by 20%.”
-- “All favorites lose in the Round of 16.”
-- “Lock Norway 2–1 France in the group stage, then simulate.”
+## Scenario examples
 
-Tip: If you mention a country explicitly, the UI will try to **highlight that team** in the bracket after a single-run simulation.
+- "What if Norway wins all their group games?"
+- "Simulate 1000 runs and show the top 10 winners."
+- "France loses Mbappé to injury."
+- "Brazil gets weakened by 20%."
+- "All favorites lose in the Round of 16."
+- "Lock Norway 2-1 France in the group stage, then simulate."
+
+Mentioning a country by name highlights that team in the bracket after a single-run simulation.
 
 ---
 
-## How Scenarios Work (Under the Hood)
+## How scenarios work (under the hood)
 
 ### With Mistral enabled
 The agent instructs Mistral to return JSON actions in a fenced block, e.g.:
@@ -179,19 +156,19 @@ Supported action types include:
 - `reset`
 
 ### Without Mistral (fallback mode)
-A simpler keyword parser kicks in. It won’t understand everything, but it can still:
-- interpret basic “injury” prompts (reduces attack/defense),
+A simpler keyword parser kicks in. It won't understand everything, but it can still:
+- interpret basic "injury" prompts (reduces attack/defense),
 - handle simple boost/nerf phrasing,
 - trigger simulation when asked.
 
 ---
 
-## How the Simulation Works
+## How the simulation works
 - **Match engine:** Dixon-Coles (1997) bivariate distribution — a Poisson model with a low-score correlation correction (parameter `rho`) that fixes the well-known under-prediction of 0-0, 1-1, 1-0 and 0-1 scorelines in football. The joint PMF is built over `{0..10}^2` and sampled by inverse CDF.
 - **Neutral venue, always.** Every World Cup match is played on neutral ground, so the simulator applies **no home-advantage term** — no `gamma`, no home/away asymmetry.
 - **Team strength is fitted, not eyeballed.** `atk_dc` / `defn_dc` come from a Dixon-Coles MLE fit on **~4 000 real international matches** since the 2022 World Cup (martj42/international_results, MIT-licensed). The fitter uses Dixon-Coles exponential time-decay (`xi=0.0065`/day, half-life ~107 days) so recent form weighs more, and a per-match **neutral-venue flag** so the home-advantage `gamma` is estimated from qualifiers only and is then **discarded** at simulator time.
 - **Expected goals = the DC formula, directly.** The simulator computes `lambda_a = exp(mu + atk_a - defn_b)` and symmetrically for `lambda_b`, using the same fitted parameters that `validate_international.py` evaluates. No `AVG_GOALS_PER_TEAM` constant, no `1.40` normalisation, no separate form multiplier — all of which would double-count recency that is already in the time-decayed fit. The published calibration result therefore describes the actual simulator, not a drifted approximation.
-- **`form` field is computed for narrative use** (each team's average points-per-match over its last 10 international results, W=1/D=0.5/L=0), so AI commentary and UI labels can talk about "in form" / "out of form" — but it is **not** used in the lambda calculation when fitted ratings are loaded.
+- **`form` field is computed for narrative use only** (each team's average points-per-match over its last 10 internationals, W=1/D=0.5/L=0), so AI commentary and UI labels can talk about "in form" / "out of form" — but it is **not** used in the lambda calculation when fitted ratings are loaded.
 - **Group standings:** points → goal difference → goals for → FIFA ranking (final tie-breaker).
 - **48-team format:** 12 groups, top 2 qualify + **8 best third-place** teams.
 - **Knockouts:** no draws — extra time (Dixon-Coles-sampled) + penalties if still level.
@@ -205,7 +182,7 @@ python -m scripts.fit_international --years 4 --xi 0.0065
 
 All logic lives in `simulation.py`; format/bracket slots and ratings in `data.py`.
 
-## Calibration Validation
+## Calibration validation
 
 The file `scripts/validate_international.py` is the quant-evaluation side of the project. It answers the only question that matters for a probabilistic forecaster: *is this model's distribution over outcomes actually calibrated when judged on real, held-out international matches?*
 
@@ -248,7 +225,7 @@ What this is *not*: a comparison to a sharp market. International tournament clo
 
 ---
 
-## Project Structure
+## Project structure
 ```text
 app.py                      # Main Streamlit app (setup → chat → simulation → visuals)
 ui.py                       # Styling, setup screen UI, bracket rendering, narration text
@@ -285,9 +262,8 @@ Edit `data.py`:
 - `form` is an extra multiplier used by the match engine.
 - `key_players` is used for injury-style prompts (and fallback parsing).
 
-### Update groups or qualification assumptions
-- Groups are defined in `GROUPS` in `data.py`.
-- The “6 undecided slots” are defined in `PLAYOFF_SLOTS`.
+### Update groups
+Groups are defined in `GROUPS` in `data.py`. `PLAYOFF_SLOTS` retains the historical playoff structure for reference but no longer surfaces alternates in the UI.
 
 ### Change ElevenLabs voice
 In `app.py`, update:
@@ -298,21 +274,18 @@ In `app.py`, update:
 
 ## Troubleshooting
 
-**“Set MISTRAL_API_KEY in .env” warning**
-- Normal if you didn’t configure Mistral.
-- The app still works; scenario chat falls back to keyword parsing.
+**"Set MISTRAL_API_KEY in .env" warning**
+- Expected if you haven't configured Mistral. The app still works; scenario chat falls back to keyword parsing.
 
 **Voice is disabled**
-- Set `ELEVENLABS_API_KEY` and ensure the `elevenlabs` package is installed (it is included in `requirements.txt`).
-- Use the mute button (🔊/🔇) to toggle.
+- Set `ELEVENLABS_API_KEY` and ensure the `elevenlabs` package is installed (included in `requirements.txt`). Toggle the mute button in the header.
 
 **Flags not showing**
-- Flags are rendered via images to avoid emoji rendering issues in browsers.
-- Make sure you have internet access if flags are fetched externally.
+- Flags are fetched from flagcdn.com to avoid Windows emoji rendering issues. Requires internet access.
 
 ---
 
-## Roadmap Ideas
+## Roadmap
 - **Market-reference backtest on internationals.** Add Euro 2024 / Copa America 2024 closing odds from a paid feed and run de-vigging + Kelly + scoring rules vs the market. (No free equivalent of football-data.co.uk exists for international tournaments, so this requires either scraping or a paid data subscription.)
 - **Walk-forward validation.** Replace the single 80/20 split with rolling-origin evaluation: refit at each tournament window so the test set always reflects the deployment regime (recent international fixture density / opponent quality).
 - **Parametric bootstrap on attack/defense.** The fitted ratings are MLE point estimates. Resample matches and refit to get per-team CIs, then propagate that uncertainty into Monte Carlo win-probability bands.

@@ -12,7 +12,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-from data import TEAMS, GROUPS, get_teams_copy, CONFIRMED_QUALIFIED, PLAYOFF_SLOTS
+from data import TEAMS, GROUPS, get_teams_copy
 
 # ---------------------------------------------------------------------------
 # Try to import Mistral client
@@ -106,10 +106,12 @@ def _build_system_prompt(
     groups: dict[str, list[str]] | None = None,
 ) -> str:
     """Build a system prompt dynamically from the active teams and groups."""
-    if team_codes is None:
-        team_codes = sorted(TEAMS.keys())
     if groups is None:
         groups = GROUPS
+    if team_codes is None:
+        # Default to the 48 teams actually in the active groups, never the
+        # full TEAMS dict (which retains non-qualified teams as fit data).
+        team_codes = sorted({c for codes in groups.values() for c in codes})
 
     codes_str = ", ".join(sorted(team_codes))
 
