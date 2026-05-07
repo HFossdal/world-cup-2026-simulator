@@ -37,7 +37,7 @@ from simulation import (
     simulate_tournament,
     run_monte_carlo,
 )
-from mistral_agent import MistralScenarioAgent, apply_modifications
+from mistral_agent import MistralScenarioAgent, ScenarioModification, apply_modifications
 from ui import (
     inject_css,
     render_header,
@@ -159,8 +159,8 @@ if "muted" not in st.session_state:
     st.session_state.muted = False
 if "highlight_team" not in st.session_state:
     st.session_state.highlight_team = None
-if "pending_prompt" not in st.session_state:
-    st.session_state.pending_prompt = None
+if "pending_chip" not in st.session_state:
+    st.session_state.pending_chip = None
 if "last_audio_played" not in st.session_state:
     st.session_state.last_audio_played = None
 
@@ -300,10 +300,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Example scenario chips
-chip_prompt = render_scenario_chips()
-if chip_prompt:
-    st.session_state.pending_prompt = chip_prompt
+# Example scenario chips — clicking a chip queues a pre-built scenario
+# that bypasses Mistral / fallback parsing entirely.
+chip_scenario = render_scenario_chips()
+if chip_scenario:
+    st.session_state.pending_chip = chip_scenario
     st.rerun()
 
 # Display chat history
@@ -311,13 +312,83 @@ for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Resolve user input: pending chip prompt takes priority over chat_input
-user_input = None
-if st.session_state.pending_prompt:
-    user_input = st.session_state.pending_prompt
-    st.session_state.pending_prompt = None
-else:
-    user_input = st.chat_input("Ask a what-if scenario...")
+# ── Branch: pending chip click runs the canned scenario directly ──
+if st.session_state.get("pending_chip"):
+    scenario = st.session_state.pending_chip
+    st.session_state.pending_chip = None
+    audio_placeholder.empty()
+    st.session_state.last_audio_played = None
+
+    # Echo the user-style message
+    st.session_state.chat_history.append(
+        {"role": "user", "content": scenario["user_text"]}
+    )
+    with st.chat_message("user"):
+        st.markdown(scenario["user_text"])
+
+    # Apply pre-built modifications
+    mods = [ScenarioModification(action=m["action"], params=m["params"])
+            for m in scenario["modifications"]]
+    if mods:
+        teams, changes, new_locks, new_constraints = apply_modifications(teams, mods)
+        st.session_state.teams = teams
+        st.session_state.locked_results.update(new_locks)
+        if new_constraints.get("force_exit"):
+            existing = st.session_state.round_constraints.get("force_exit", {})
+            for rnd, team_set in new_constraints["force_exit"].items():
+                existing.setdefault(rnd, set()).update(team_set)
+            st.session_state.round_constraints["force_exit"] = existing
+        if new_constraints.get("force_group_winner"):
+            existing_gw = st.session_state.round_constraints.get(
+                "force_group_winner", set()
+            )
+            existing_gw.update(new_constraints["force_group_winner"])
+            st.session_state.round_constraints["force_group_winner"] = existing_gw
+        st.session_state.change_log.extend(changes)
+
+    # Acknowledge what we're doing
+    intro = scenario["narration"]
+    st.session_state.chat_history.append({"role": "assistant", "content": intro})
+    with st.chat_message("assistant"):
+        st.markdown(intro)
+
+    # Run the simulation
+    sim_n = scenario.get("sim_n", 1000)
+    sim_mode = scenario.get("sim_mode", "monte_carlo")
+    with st.spinner(f"Running {sim_n} simulations..." if sim_mode == "monte_carlo"
+                    else "Simulating tournament..."):
+        if sim_mode == "monte_carlo":
+            sim_result = run_monte_carlo(
+                teams, sim_n, active_groups,
+                st.session_state.locked_results,
+                st.session_state.round_constraints,
+            )
+            st.session_state.mc_data = sim_result
+            st.session_state.tournament_result = None
+            narration = generate_mc_narration(sim_result, teams)
+        else:
+            sim_result = simulate_tournament(
+                teams, active_groups,
+                st.session_state.locked_results,
+                st.session_state.round_constraints,
+            )
+            st.session_state.tournament_result = sim_result
+            st.session_state.mc_data = None
+            narration = generate_narration(sim_result, teams)
+
+    st.session_state.chat_history.append({"role": "assistant", "content": narration})
+    with st.chat_message("assistant"):
+        st.markdown(narration)
+
+    if not st.session_state.muted and narration:
+        with st.spinner("Generating commentary..."):
+            results_audio = speak(narration)
+        if results_audio:
+            play_audio(audio_placeholder, results_audio)
+            st.session_state.last_audio_played = "results"
+
+# ── Regular typed chat input ──
+user_input = st.chat_input("Ask a what-if scenario...")
 
 # Process user input (from chip click or typed message)
 if user_input:

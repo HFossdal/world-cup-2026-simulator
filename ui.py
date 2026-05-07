@@ -89,6 +89,16 @@ div[data-testid="stMarkdownContainer"] span {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
+/* Exempt Material Symbols icons from the Inter override, otherwise the
+   chat avatar ligatures render as literal text ("face", "smart_toy"). */
+.stApp [class*="material-symbols"],
+.stApp [class*="material-icons"],
+.stApp [class*="MuiSvgIcon"],
+.stApp i[class*="icon"] {
+    font-family: 'Material Symbols Rounded', 'Material Symbols Outlined',
+                 'Material Icons' !important;
+}
+
 /* Headings: off-white, tighter tracking, no gold */
 .stApp h1, .stApp h2, .stApp h3, .stApp h4 {
     color: var(--text) !important;
@@ -505,28 +515,73 @@ def render_header():
 # Scenario example chips
 # ---------------------------------------------------------------------------
 
-EXAMPLE_SCENARIOS: list[tuple[str, str]] = [
-    # (chip label, full prompt sent to the agent)
-    ("Norway runs the table",       "What if Norway wins all their group games?"),
-    ("Brazil −20% strength",        "Simulate 100 runs with Brazil weakened by 20%"),
-    ("Mbappé injured",              "What are France's chances if Mbappe is injured?"),
-    ("1000 sims, top 10 winners",   "Run 1000 simulations and show me the top 10 winners"),
-    ("Favorites crash in R16",      "What if all the favorites lose in the Round of 16?"),
+EXAMPLE_SCENARIOS: list[dict] = [
+    # Each chip carries its own pre-built scenario so it works regardless of
+    # whether MISTRAL_API_KEY is set — chips bypass the LLM/fallback parser.
+    {
+        "label": "Norway runs the table",
+        "user_text": "What if Norway wins all their group games?",
+        "modifications": [
+            {"action": "force_group_winner", "params": {"team": "NOR"}},
+        ],
+        "narration": "Forcing Norway to top their group, then running 1000 simulations.",
+        "sim_mode": "monte_carlo", "sim_n": 1000,
+    },
+    {
+        "label": "Brazil −20% strength",
+        "user_text": "Simulate 100 runs with Brazil weakened by 20%",
+        "modifications": [
+            {"action": "nerf_team", "params": {"team": "BRA", "pct": 20}},
+        ],
+        "narration": "Reducing Brazil's ratings by 20%, then running 100 simulations.",
+        "sim_mode": "monte_carlo", "sim_n": 100,
+    },
+    {
+        "label": "Mbappé injured",
+        "user_text": "What are France's chances if Mbappé is injured?",
+        "modifications": [
+            {"action": "adjust_team_rating",
+             "params": {"team": "FRA", "attribute": "attack", "delta": -0.15}},
+        ],
+        "narration": "Reducing France's attack by 0.15 to simulate losing Mbappé, then running 1000 sims.",
+        "sim_mode": "monte_carlo", "sim_n": 1000,
+    },
+    {
+        "label": "1000 sims, top 10",
+        "user_text": "Run 1000 simulations and show me the top 10 winners",
+        "modifications": [],
+        "narration": "Running 1000 simulations against the baseline ratings.",
+        "sim_mode": "monte_carlo", "sim_n": 1000,
+    },
+    {
+        "label": "Favorites crash in R16",
+        "user_text": "What if all the favorites lose in the Round of 16?",
+        "modifications": [
+            {"action": "force_round_exit",
+             "params": {"round": "R16",
+                        "teams": ["ARG", "BRA", "FRA", "ENG",
+                                  "ESP", "GER", "POR", "NED"]}},
+        ],
+        "narration": "Forcing the top 8 favorites to exit in the Round of 16, then running 1000 sims.",
+        "sim_mode": "monte_carlo", "sim_n": 1000,
+    },
 ]
 
 
-def render_scenario_chips() -> str | None:
-    """Render clickable example scenario pills. Returns the full prompt
-    text of the clicked chip, or None."""
-    clicked: str | None = None
+def render_scenario_chips() -> dict | None:
+    """Render clickable example scenario pills. Returns the chosen scenario
+    dict (with pre-built modifications + sim params) if a chip was clicked,
+    or None."""
+    clicked: dict | None = None
     # Hidden marker div — CSS :has() selector uses this to target the
     # sibling columns container and style buttons as pills.
     st.markdown('<div class="chip-marker"></div>', unsafe_allow_html=True)
     cols = st.columns(len(EXAMPLE_SCENARIOS))
-    for i, (col, (label, prompt)) in enumerate(zip(cols, EXAMPLE_SCENARIOS)):
+    for i, (col, scenario) in enumerate(zip(cols, EXAMPLE_SCENARIOS)):
         with col:
-            if st.button(label, key=f"chip_{i}", use_container_width=True):
-                clicked = prompt
+            if st.button(scenario["label"], key=f"chip_{i}",
+                         use_container_width=True):
+                clicked = scenario
     return clicked
 
 
